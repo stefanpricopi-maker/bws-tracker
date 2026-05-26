@@ -6,7 +6,6 @@ interface Props {
 }
 
 const { title = 'BWS Tracker' } = Astro.props;
-const path = Astro.url.pathname;
 ---
 
 <!doctype html>
@@ -22,42 +21,11 @@ const path = Astro.url.pathname;
     <!--
       Mobile shell: centered column, max 28rem wide, full viewport height.
       On larger screens this creates the "phone on desktop" effect.
+      The bottom nav is rendered by the Dashboard React component so tab state
+      stays reactive without a full-page navigation.
     -->
     <div class="relative mx-auto flex min-h-screen max-w-md flex-col bg-gray-900">
-
-      <!-- Scrollable page content — bottom padding clears the nav bar -->
-      <main class="flex-1 overflow-y-auto px-4 pt-6 pb-24">
-        <slot />
-      </main>
-
-      <!-- Fixed bottom navigation -->
-      <nav
-        class="fixed bottom-0 left-1/2 w-full max-w-md -translate-x-1/2
-               flex items-center justify-around
-               border-t border-gray-800 bg-gray-900/95 backdrop-blur-sm
-               h-16 z-50"
-      >
-        {[
-          { href: '/',         label: 'Dashboard', icon: '⊞' },
-          { href: '/workouts', label: 'Workout',   icon: '🏋' },
-          { href: '/log',      label: 'Diet',      icon: '🥗' },
-          { href: '/profile',  label: 'Profile',   icon: '👤' },
-        ].map(({ href, label, icon }) => {
-          const active = href === '/' ? path === '/' : path.startsWith(href);
-          return (
-            <a
-              href={href}
-              class={`flex flex-col items-center gap-0.5 px-3 py-1 text-xs font-medium transition-colors duration-150 ${
-                active ? 'text-violet-400' : 'text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              <span class="text-xl leading-none">{icon}</span>
-              <span>{label}</span>
-            </a>
-          );
-        })}
-      </nav>
-
+      <slot />
     </div>
   </body>
 </html>
