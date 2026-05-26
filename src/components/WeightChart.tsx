@@ -7,7 +7,6 @@ import {
   CartesianGrid,
   Tooltip,
   ReferenceLine,
-  type TooltipProps,
 } from 'recharts';
 
 export interface WeightEntry {
@@ -25,7 +24,10 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function CustomTooltip({ active, payload, label }: TooltipProps<number, string>) {
+interface TooltipPayload { value?: number }
+interface TooltipArgs { active?: boolean; payload?: TooltipPayload[]; label?: string }
+
+function CustomTooltip({ active, payload, label }: TooltipArgs) {
   if (!active || !payload?.length) return null;
   const value = payload[0]?.value;
   return (

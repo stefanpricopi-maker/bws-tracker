@@ -1,16 +1,11 @@
 ---
-import AppLayout from '../layouts/AppLayout.astro';
+import Layout from '../layouts/Layout.astro';
 ---
 
-<AppLayout title="Daily Log">
-  <div
-    class="flex flex-col items-center justify-center gap-3 pt-16 text-center"
-    style="color: var(--color-muted);"
-  >
-    <span class="text-5xl">📋</span>
-    <p class="font-semibold" style="color: var(--color-text);">Daily Log — Phase 3</p>
-    <p class="text-sm max-w-xs">
-      The daily log form (weight, calories, protein, steps) will be built in the next phase.
-    </p>
+<Layout title="Diet">
+  <div class="flex flex-col items-center justify-center gap-3 pt-20 text-center text-gray-500">
+    <span class="text-5xl">🥗</span>
+    <p class="font-semibold text-white">Diet Log</p>
+    <p class="text-sm max-w-xs">Coming in Phase 3 — daily calories, protein, carbs, fat, and steps.</p>
   </div>
-</AppLayout>
+</Layout>

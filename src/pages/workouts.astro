@@ -1,16 +1,11 @@
 ---
-import AppLayout from '../layouts/AppLayout.astro';
+import Layout from '../layouts/Layout.astro';
 ---
 
-<AppLayout title="Workouts">
-  <div
-    class="flex flex-col items-center justify-center gap-3 pt-16 text-center"
-    style="color: var(--color-muted);"
-  >
+<Layout title="Workout">
+  <div class="flex flex-col items-center justify-center gap-3 pt-20 text-center text-gray-500">
     <span class="text-5xl">🏋️</span>
-    <p class="font-semibold" style="color: var(--color-text);">Workouts — Phase 3</p>
-    <p class="text-sm max-w-xs">
-      Workout logging (Push / Pull / Legs) and progressive overload tracking will be built in the next phase.
-    </p>
+    <p class="font-semibold text-white">Workout Logger</p>
+    <p class="text-sm max-w-xs">Coming in Phase 3 — Push / Pull / Legs logging with progressive overload tracking.</p>
   </div>
-</AppLayout>
+</Layout>

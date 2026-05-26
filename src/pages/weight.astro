@@ -3,14 +3,14 @@ import AppLayout from '../layouts/AppLayout.astro';
 import WeightChart from '../components/WeightChart';
 import StatCard from '../components/StatCard';
 import { db } from '../db';
-import { dailyLogs, users } from '../db/schema';
-import { eq, asc, isNotNull } from 'drizzle-orm';
+import { dailyLogs } from '../db/schema';
+import { eq, asc } from 'drizzle-orm';
 
 // ── Fetch data ─────────────────────────────────────────────────────────────
 // For now we use user id=1 (will be replaced by session auth in a later phase)
 const USER_ID = 1;
 
-const rows = await db
+const rows = db
   .select({ date: dailyLogs.date, weight: dailyLogs.weightKg })
   .from(dailyLogs)
   .where(eq(dailyLogs.userId, USER_ID))
