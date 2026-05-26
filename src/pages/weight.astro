@@ -1,0 +1,108 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import WeightChart from '../components/WeightChart';
+import StatCard from '../components/StatCard';
+import { db } from '../db';
+import { dailyLogs, users } from '../db/schema';
+import { eq, asc, isNotNull } from 'drizzle-orm';
+
+// ── Fetch data ─────────────────────────────────────────────────────────────
+// For now we use user id=1 (will be replaced by session auth in a later phase)
+const USER_ID = 1;
+
+const rows = await db
+  .select({ date: dailyLogs.date, weight: dailyLogs.weightKg })
+  .from(dailyLogs)
+  .where(eq(dailyLogs.userId, USER_ID))
+  .orderBy(asc(dailyLogs.date))
+  .all();
+
+const weightData = rows
+  .filter((r): r is { date: string; weight: number } => r.weight != null)
+  .map((r) => ({ date: r.date, weight: r.weight }));
+
+// ── Stats ──────────────────────────────────────────────────────────────────
+const latest   = weightData.at(-1);
+const previous = weightData.at(-2);
+const first    = weightData.at(0);
+
+const delta    = latest && previous ? latest.weight - previous.weight : undefined;
+const totalDelta = latest && first && first !== latest ? latest.weight - first.weight : undefined;
+
+// 7-day average
+const last7  = weightData.slice(-7);
+const avg7   = last7.length > 0
+  ? last7.reduce((s, d) => s + d.weight, 0) / last7.length
+  : null;
+
+// 30-day average
+const last30 = weightData.slice(-30);
+const avg30  = last30.length > 0
+  ? last30.reduce((s, d) => s + d.weight, 0) / last30.length
+  : null;
+---
+
+<AppLayout title="Weight Trend">
+  <!-- Current weight hero -->
+  <div
+    class="rounded-2xl p-5 mb-5 flex flex-col gap-1"
+    style="background: linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-2) 100%); border: 1px solid var(--color-border);"
+  >
+    <span class="text-xs font-medium uppercase tracking-widest" style="color: var(--color-muted);">
+      Current Weight
+    </span>
+    <div class="flex items-baseline gap-2">
+      <span class="text-5xl font-black tabular-nums" style="color: var(--color-text);">
+        {latest ? latest.weight.toFixed(1) : '—'}
+      </span>
+      <span class="text-lg font-semibold" style="color: var(--color-muted);">kg</span>
+    </div>
+    {delta != null && (
+      <span
+        class="text-sm font-semibold mt-1"
+        style={`color: ${delta > 0 ? 'var(--color-danger)' : delta < 0 ? 'var(--color-success)' : 'var(--color-muted)'};`}
+      >
+        {delta > 0 ? '▲' : delta < 0 ? '▼' : '●'}&nbsp;
+        {Math.abs(delta).toFixed(1)} kg vs last entry
+      </span>
+    )}
+  </div>
+
+  <!-- Stat cards row -->
+  <div class="grid grid-cols-3 gap-3 mb-5">
+    <StatCard
+      label="7-day avg"
+      value={avg7 != null ? avg7.toFixed(1) : '—'}
+      unit="kg"
+      client:load
+    />
+    <StatCard
+      label="30-day avg"
+      value={avg30 != null ? avg30.toFixed(1) : '—'}
+      unit="kg"
+      client:load
+    />
+    <StatCard
+      label="Total Δ"
+      value={totalDelta != null ? (totalDelta > 0 ? '+' : '') + totalDelta.toFixed(1) : '—'}
+      unit="kg"
+      client:load
+    />
+  </div>
+
+  <!-- Chart section -->
+  <div
+    class="rounded-2xl p-4"
+    style="background-color: var(--color-surface); border: 1px solid var(--color-border);"
+  >
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-semibold tracking-wide" style="color: var(--color-text);">
+        Weight over time
+      </h2>
+      <span class="text-xs px-2 py-0.5 rounded-full" style="background-color: var(--color-surface-2); color: var(--color-muted);">
+        {weightData.length} entries
+      </span>
+    </div>
+    <WeightChart data={weightData} client:load />
+  </div>
+</AppLayout>
