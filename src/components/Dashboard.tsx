@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import WeightTrend  from './WeightTrend';
-import DietTracker  from './DietTracker';
-import StepTracker  from './StepTracker';
+import WeightTrend    from './WeightTrend';
+import DietTracker    from './DietTracker';
+import StepTracker    from './StepTracker';
+import WorkoutLogger  from './WorkoutLogger';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
@@ -19,20 +20,6 @@ const NAV: NavItem[] = [
   { id: 'diet',      label: 'Diet',      icon: '🥗'  },
   { id: 'profile',   label: 'Profile',   icon: '👤'  },
 ];
-
-// ── Workout stub ───────────────────────────────────────────────────────────
-
-function WorkoutStub() {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 pt-20 text-center text-gray-500">
-      <span className="text-5xl">🏋️</span>
-      <p className="font-semibold text-white">Workout Logger</p>
-      <p className="text-sm max-w-xs">
-        Coming in Phase 4 — Push / Pull / Legs logging with progressive overload tracking.
-      </p>
-    </div>
-  );
-}
 
 // ── Profile stub ───────────────────────────────────────────────────────────
 
@@ -70,7 +57,7 @@ export default function Dashboard() {
       {/* Page content */}
       <div className="flex-1 overflow-y-auto px-4 pt-6 pb-24">
         {active === 'dashboard' && <DashboardTab />}
-        {active === 'workout'   && <WorkoutStub />}
+        {active === 'workout'   && <WorkoutLogger />}
         {active === 'diet'      && <DietTracker />}
         {active === 'profile'   && <ProfileStub />}
       </div>
