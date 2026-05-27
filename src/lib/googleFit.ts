@@ -1,16 +1,16 @@
 import { google } from 'googleapis';
 
-const CLIENT_ID     = import.meta.env.GOOGLE_CLIENT_ID     ?? process.env.GOOGLE_CLIENT_ID     ?? '';
-const CLIENT_SECRET = import.meta.env.GOOGLE_CLIENT_SECRET ?? process.env.GOOGLE_CLIENT_SECRET ?? '';
-const REDIRECT_URI  = import.meta.env.GOOGLE_REDIRECT_URI  ?? process.env.GOOGLE_REDIRECT_URI  ?? '';
-
 const SCOPES = [
   'https://www.googleapis.com/auth/fitness.activity.read',
   'https://www.googleapis.com/auth/fitness.sleep.read',
 ];
 
+// Read env vars lazily inside the function so they are never inlined at build time
 export function createOAuth2Client() {
-  return new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
+  const clientId     = process.env['GOOGLE_CLIENT_ID']     ?? '';
+  const clientSecret = process.env['GOOGLE_CLIENT_SECRET'] ?? '';
+  const redirectUri  = process.env['GOOGLE_REDIRECT_URI']  ?? 'http://localhost:4321/api/auth/google/callback';
+  return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 }
 
 /** Step 1 — generate consent URL */

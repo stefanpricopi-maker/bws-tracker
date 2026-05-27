@@ -10,6 +10,7 @@ export const GET: APIRoute = async ({ url }) => {
   const error = url.searchParams.get('error');
 
   if (error || !code) {
+    console.error('Google OAuth error:', error ?? 'no_code', url.toString());
     return new Response(null, { status: 302, headers: { Location: '/?google_auth=denied' } });
   }
 

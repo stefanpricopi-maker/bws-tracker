@@ -29,7 +29,10 @@ COPY --from=builder /app/package.json ./package.json
 # Drizzle migrations (run at container start if needed)
 COPY --from=builder /app/drizzle ./drizzle
 
+# Migration runner script
+COPY --from=builder /app/scripts/migrate.mjs ./scripts/migrate.mjs
+
 EXPOSE 4321
 
-# Astro @astrojs/node standalone output entrypoint
-CMD ["node", "./dist/server/entry.mjs"]
+# Run migrations then start the server
+CMD ["sh", "-c", "node ./scripts/migrate.mjs && node ./dist/server/entry.mjs"]

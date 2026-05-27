@@ -5,9 +5,9 @@ import type { APIRoute } from 'astro';
 //   AI_API_BASE_URL — base URL, defaults to OpenAI (https://api.openai.com/v1)
 //   AI_MODEL        — model to use, defaults to gpt-4o (must support vision)
 
-const BASE_URL  = import.meta.env.AI_API_BASE_URL ?? 'https://api.openai.com/v1';
-const API_KEY   = import.meta.env.AI_API_KEY;
-const MODEL     = import.meta.env.AI_MODEL ?? 'gpt-4o';
+const BASE_URL  = process.env['AI_API_BASE_URL'] ?? 'https://api.openai.com/v1';
+const API_KEY   = process.env['AI_API_KEY'];
+const MODEL     = process.env['AI_MODEL'] ?? 'gpt-4o';
 
 const SYSTEM_PROMPT =
   'Analyze this image of a meal or nutrition label. Estimate the total Calories, Protein (g), Carbs (g), and Fat (g). Return strictly a JSON object with keys: calories, protein, carbs, fat.';
