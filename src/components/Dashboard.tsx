@@ -54,20 +54,12 @@ export default function Dashboard() {
 
   return (
     <>
-      {/* Page content */}
-      <div className="flex-1 overflow-y-auto px-4 pt-6 pb-24">
-        {active === 'dashboard' && <DashboardTab />}
-        {active === 'workout'   && <WorkoutLogger />}
-        {active === 'diet'      && <DietTracker />}
-        {active === 'profile'   && <ProfileStub />}
-      </div>
-
-      {/* Bottom navigation — React-controlled so active state is reactive */}
+      {/* Top navigation bar */}
       <nav
-        className="fixed bottom-0 left-1/2 w-full max-w-md -translate-x-1/2
+        className="sticky top-0 z-50 w-full
                    flex items-center justify-around
-                   border-t border-gray-800 bg-gray-900/95 backdrop-blur-sm
-                   h-16 z-50"
+                   border-b border-gray-800 bg-gray-900/95 backdrop-blur-sm
+                   h-14"
       >
         {NAV.map(({ id, label, icon }) => (
           <button
@@ -82,6 +74,14 @@ export default function Dashboard() {
           </button>
         ))}
       </nav>
+
+      {/* Page content */}
+      <div className="flex-1 overflow-y-auto px-4 pt-6 pb-8">
+        {active === 'dashboard' && <DashboardTab />}
+        {active === 'workout'   && <WorkoutLogger />}
+        {active === 'diet'      && <DietTracker />}
+        {active === 'profile'   && <ProfileStub />}
+      </div>
     </>
   );
 }
