@@ -331,19 +331,44 @@ export default function DietTracker() {
       </div>
 
       {/* Active burn banner (shown after wearable sync) */}
-      {activeBurn !== null && (
-        <div
-          className="rounded-xl px-4 py-3 flex flex-col gap-0.5"
-          style={{ backgroundColor: '#1f1a0e', border: '1px solid #78350f' }}
-        >
-          <p className="text-xs font-semibold text-amber-400">
-            🔥 Active burn today: {activeBurn.toLocaleString()} kcal
-          </p>
-          <p className="text-xs text-amber-300/70">
-            Your net target is <span className="font-bold text-amber-300">{(TARGETS.calories + activeBurn).toLocaleString()} kcal</span> — eat more to compensate.
-          </p>
-        </div>
-      )}
+      {activeBurn !== null && (() => {
+        // How much extra to eat back: 50% of active burn, capped at 500 kcal.
+        // Your calorie target (1850) already includes a planned deficit from TDEE.
+        // Eating back 100% of active burn would erase that deficit entirely.
+        // The 50% rule preserves most of the deficit while avoiding excessive under-eating.
+        const eatBack     = Math.min(Math.round(activeBurn * 0.5), 500);
+        const adjustedTarget = TARGETS.calories + eatBack;
+        const isHigh      = activeBurn >= 600;
+
+        return (
+          <div
+            className="rounded-xl px-4 py-3 flex flex-col gap-1"
+            style={{ backgroundColor: '#1f1a0e', border: '1px solid #78350f' }}
+          >
+            <p className="text-xs font-semibold text-amber-400">
+              🔥 Active burn today: {activeBurn.toLocaleString()} kcal
+            </p>
+            {isHigh ? (
+              <>
+                <p className="text-xs text-amber-300/80">
+                  That's a big output. Eating back ~50% ({eatBack} kcal) keeps your deficit healthy
+                  without wiping it out. Suggested intake today:{' '}
+                  <span className="font-bold text-amber-300">{adjustedTarget.toLocaleString()} kcal</span>.
+                </p>
+                <p className="text-[10px] text-amber-300/40 mt-0.5">
+                  Eating back 100% ({(TARGETS.calories + activeBurn).toLocaleString()} kcal) would
+                  erase your planned deficit entirely.
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-amber-300/70">
+                Deficit is on track. No adjustment needed — your target stays{' '}
+                <span className="font-bold text-amber-300">{TARGETS.calories.toLocaleString()} kcal</span>.
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Input form */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
