@@ -1,0 +1,53 @@
+services:
+
+  # ── Astro Web App ────────────────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "4321:4321"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 4321
+      # Database — point to a Turso/LibSQL remote DB in production,
+      # or leave as file URL for a local SQLite volume:
+      DATABASE_URL: ${DATABASE_URL:-file:/data/bws.db}
+      DATABASE_AUTH_TOKEN: ${DATABASE_AUTH_TOKEN:-}
+      # Vision AI (Phase 9)
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_API_BASE_URL: ${AI_API_BASE_URL:-https://api.openai.com/v1}
+      AI_MODEL: ${AI_MODEL:-gpt-4o}
+    volumes:
+      # Persist local SQLite DB across container restarts
+      # (only used when DATABASE_URL is a file:// path)
+      - db_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4321/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── MCP Server ───────────────────────────────────────────────────────────────
+  # NOTE: The MCP server communicates over stdio and is intended to be run
+  # locally by Cursor — not as a long-running HTTP service.
+  # This service is provided for reference / scripted one-off use:
+  #   docker compose run --rm mcp
+  mcp:
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-file:/data/bws.db}
+    volumes:
+      - db_data:/data
+    profiles:
+      # Not started by default (`docker compose up`); run explicitly with:
+      #   docker compose --profile mcp up mcp
+      - mcp
+
+volumes:
+  db_data:
