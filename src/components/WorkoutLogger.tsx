@@ -24,6 +24,10 @@ interface ExerciseLog {
   lastWeight: number | null;
   lastReps: number | null;
   lastDate: string | null;
+  // Auto-regulation targets (Phase 12)
+  targetWeight: number | null;
+  targetReps: number | null;
+  isWeightIncrease: boolean; // true when Rule A applied (+2.5 kg)
 }
 
 interface DayConfig {
@@ -171,6 +175,25 @@ const MYO_SETS = (): SetInput[] => [
   { weight: '', reps: '', setLabel: 'M3' },
 ];
 
+/**
+ * Phase 12 — Mathematical Auto-Regulation Engine
+ *
+ * Rule A: maxReps >= 10 → add 2.5 kg, target reps = 8  (weight increase)
+ * Rule B: maxReps <  10 → same weight, target reps = maxReps + 1  (rep increase)
+ */
+function autoRegulate(
+  maxWeight: number | null,
+  maxReps: number | null,
+): { targetWeight: number | null; targetReps: number | null; isWeightIncrease: boolean } {
+  if (maxWeight === null || maxReps === null) {
+    return { targetWeight: null, targetReps: null, isWeightIncrease: false };
+  }
+  if (maxReps >= 10) {
+    return { targetWeight: Math.round((maxWeight + 2.5) * 100) / 100, targetReps: 8, isWeightIncrease: true };
+  }
+  return { targetWeight: maxWeight, targetReps: maxReps + 1, isWeightIncrease: false };
+}
+
 function buildExerciseLogs(day: DayConfig, medMode = false): ExerciseLog[] {
   const list = medMode && day.medExercise
     ? [day.medExercise]
@@ -181,6 +204,9 @@ function buildExerciseLogs(day: DayConfig, medMode = false): ExerciseLog[] {
     lastWeight: null,
     lastReps: null,
     lastDate: null,
+    targetWeight: null,
+    targetReps: null,
+    isWeightIncrease: false,
   }));
 }
 
@@ -210,16 +236,35 @@ export default function WorkoutLogger() {
         exerciseNames.map((name) =>
           fetch(`/api/workouts?exercise_name=${encodeURIComponent(name)}`)
             .then((r) => r.json())
-            .catch(() => ({ lastWeight: null, lastReps: null, lastDate: null })),
+            .catch(() => ({ lastWeight: null, lastReps: null, lastDate: null, maxWeight: null, maxReps: null })),
         ),
       );
       setExercises((prev) =>
-        prev.map((ex, i) => ({
-          ...ex,
-          lastWeight: results[i]?.lastWeight ?? null,
-          lastReps: results[i]?.lastReps ?? null,
-          lastDate: results[i]?.lastDate ?? null,
-        })),
+        prev.map((ex, i) => {
+          const r = results[i] ?? {};
+          const { targetWeight, targetReps, isWeightIncrease } = autoRegulate(
+            r.maxWeight ?? null,
+            r.maxReps   ?? null,
+          );
+
+          // Pre-fill every set with the auto-regulated target
+          const preFilled = ex.sets.map((s) => ({
+            ...s,
+            weight: targetWeight !== null ? String(targetWeight) : s.weight,
+            reps:   targetReps   !== null ? String(targetReps)   : s.reps,
+          }));
+
+          return {
+            ...ex,
+            lastWeight: r.lastWeight ?? null,
+            lastReps:   r.lastReps   ?? null,
+            lastDate:   r.lastDate   ?? null,
+            targetWeight,
+            targetReps,
+            isWeightIncrease,
+            sets: preFilled,
+          };
+        }),
       );
     } finally {
       setLoadingPrev(false);
@@ -476,6 +521,12 @@ export default function WorkoutLogger() {
                       M.E.D.
                     </span>
                   )}
+                  {/* Phase 12: weight-increase indicator */}
+                  {ex.isWeightIncrease && !medMode && (
+                    <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/30">
+                      ⬆️ +2.5 kg
+                    </span>
+                  )}
                   {badge && (
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full bg-opacity-20 ${badge.color}`}>
                       {badge.label}
@@ -489,6 +540,12 @@ export default function WorkoutLogger() {
                     ? `Previous: ${ex.lastWeight} kg × ${ex.lastReps} reps${ex.lastDate ? ` (${ex.lastDate})` : ''}`
                     : 'No previous data'}
                 </p>
+                {/* Auto-regulation target hint */}
+                {!loadingPrev && ex.targetWeight !== null && ex.targetReps !== null && !medMode && (
+                  <p className="text-[11px] mt-0.5 font-medium text-violet-400">
+                    🎯 Target: {ex.targetWeight} kg × {ex.targetReps} reps
+                  </p>
+                )}
               </div>
 
               {/* Set rows */}

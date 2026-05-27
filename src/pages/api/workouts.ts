@@ -43,16 +43,21 @@ export const GET: APIRoute = async ({ url }) => {
       ),
     );
 
-  const best = sets.reduce(
-    (acc, s) => (s.weight > acc.weight ? s : acc),
-    sets[0],
-  );
+  // Best set = highest weight; on tie, highest reps
+  const best = sets.reduce((acc, s) => {
+    if (s.weight > acc.weight) return s;
+    if (s.weight === acc.weight && s.reps > acc.reps) return s;
+    return acc;
+  }, sets[0]);
 
   return new Response(
     JSON.stringify({
-      lastWeight: best.weight,
-      lastReps: best.reps,
-      lastDate: latestWorkout.date,
+      lastWeight:  best.weight,
+      lastReps:    best.reps,
+      lastDate:    latestWorkout.date,
+      // Explicit aliases used by the auto-regulation engine (Phase 12)
+      maxWeight:   best.weight,
+      maxReps:     best.reps,
     }),
     { status: 200, headers: { 'Content-Type': 'application/json' } },
   );
