@@ -1,0 +1,20 @@
+{
+  "name": "bws-mcp-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "better-sqlite3": "latest",
+    "dotenv": "latest"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "latest",
+    "@types/node": "latest",
+    "typescript": "latest"
+  }
+}
