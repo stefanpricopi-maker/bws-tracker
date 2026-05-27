@@ -440,20 +440,31 @@ export default function DietTracker() {
         )}
 
         <div className="grid grid-cols-2 gap-2">
-          {([ ['calories', 'Calories (kcal)'], ['protein', 'Protein (g)'], ['carbs', 'Carbs (g)'], ['fat', 'Fat (g)'] ] as [keyof typeof form, string][]).map(
-            ([key, placeholder]) => (
-              <input
-                key={key}
-                type="number"
-                min="0"
-                step={key === 'calories' ? '1' : '0.1'}
-                placeholder={placeholder}
-                value={form[key]}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                className="rounded-xl bg-gray-800 border border-gray-700 px-3 py-3
-                           text-white placeholder-gray-600 text-sm
-                           focus:outline-none focus:border-violet-500 transition-colors"
-              />
+          {([ 
+            ['calories', 'Calories', 'kcal', '🔥'],
+            ['protein',  'Protein',  'g',    '💪'],
+            ['fat',      'Fat',      'g',    '🥑'],
+            ['carbs',    'Carbs',    'g',    '🍚'],
+          ] as [keyof typeof form, string, string, string][]).map(
+            ([key, label, unit, icon]) => (
+              <div key={key} className="flex flex-col gap-1">
+                <label className="flex items-center gap-1 text-[11px] font-semibold text-gray-400 px-1">
+                  <span>{icon}</span>
+                  <span>{label}</span>
+                  <span className="text-gray-600 font-normal">({unit})</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step={key === 'calories' ? '1' : '0.1'}
+                  placeholder="0"
+                  value={form[key]}
+                  onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                  className="rounded-xl bg-gray-800 border border-gray-700 px-3 py-3
+                             text-white placeholder-gray-600 text-sm
+                             focus:outline-none focus:border-violet-500 transition-colors"
+                />
+              </div>
             )
           )}
         </div>
