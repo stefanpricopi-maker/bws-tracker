@@ -2,6 +2,16 @@ import { useState, useEffect, useCallback } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+interface FitSession {
+  id: string;
+  name: string;
+  activityLabel: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  durationMin: number;
+  calories: number | null;
+}
+
 interface SetInput {
   weight: string;
   reps: string;
@@ -185,6 +195,9 @@ export default function WorkoutLogger() {
   const [loadingPrev, setLoadingPrev] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [fitSessions, setFitSessions] = useState<FitSession[] | null>(null);
+  const [syncingSessions, setSyncingSessions] = useState(false);
+  const [showSessions, setShowSessions] = useState(false);
 
   const fetchPrevStats = useCallback(async (day: DayConfig, isMed: boolean) => {
     if (day.isRest) return;
@@ -293,6 +306,25 @@ export default function WorkoutLogger() {
     setTimeout(() => setToast(null), 3000);
   }
 
+  async function handleSyncSessions() {
+    setSyncingSessions(true);
+    setShowSessions(true);
+    try {
+      // Fetch last 14 days of sessions
+      const end = new Date().toISOString().slice(0, 10);
+      const start = new Date(Date.now() - 13 * 86_400_000).toISOString().slice(0, 10);
+      const res = await fetch(`/api/google-fit-sessions?startDate=${start}&endDate=${end}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? 'Failed');
+      setFitSessions(data);
+    } catch (err) {
+      showToast('Could not fetch Google Fit sessions.');
+      setShowSessions(false);
+    } finally {
+      setSyncingSessions(false);
+    }
+  }
+
   const day = SPLIT[selectedDay];
 
   return (
@@ -315,8 +347,66 @@ export default function WorkoutLogger() {
         ))}
       </div>
 
-      {/* Day label */}
-      <h2 className="text-base font-bold text-white">{day.label}</h2>
+      {/* Day label + Google Fit sync */}
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-base font-bold text-white">{day.label}</h2>
+        <button
+          onClick={handleSyncSessions}
+          disabled={syncingSessions}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600/15 border border-blue-500/30
+                     text-blue-400 text-xs font-semibold hover:bg-blue-600/25 active:bg-blue-600/35
+                     disabled:opacity-50 transition-colors"
+        >
+          <svg className={`w-3.5 h-3.5 ${syncingSessions ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {syncingSessions ? 'Syncing…' : 'Google Fit'}
+        </button>
+      </div>
+
+      {/* Google Fit sessions panel */}
+      {showSessions && (
+        <div className="bg-gray-800/60 border border-gray-700/60 rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/60">
+            <span className="text-sm font-semibold text-white">Recent Sessions (14 days)</span>
+            <button onClick={() => setShowSessions(false)} className="text-gray-400 hover:text-white text-lg leading-none">×</button>
+          </div>
+          {syncingSessions ? (
+            <div className="py-8 text-center text-gray-400 text-sm">Loading sessions…</div>
+          ) : fitSessions && fitSessions.length === 0 ? (
+            <div className="py-8 text-center text-gray-400 text-sm">No sessions found in Google Fit for the last 14 days.</div>
+          ) : fitSessions ? (
+            <div className="divide-y divide-gray-700/40">
+              {fitSessions.map((s) => {
+                const date = new Date(s.startTimeMs);
+                const dateStr = date.toLocaleDateString('ro-RO', { weekday: 'short', month: 'short', day: 'numeric' });
+                const timeStr = date.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+                return (
+                  <div key={s.id} className="flex items-center gap-3 px-4 py-3">
+                    <div className="w-9 h-9 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center flex-shrink-0 text-base">
+                      {s.activityLabel.toLowerCase().includes('weight') || s.activityLabel.toLowerCase().includes('train') ? '🏋' :
+                       s.activityLabel.toLowerCase().includes('run') ? '🏃' :
+                       s.activityLabel.toLowerCase().includes('bike') || s.activityLabel.toLowerCase().includes('cycl') ? '🚴' :
+                       s.activityLabel.toLowerCase().includes('yoga') ? '🧘' :
+                       s.activityLabel.toLowerCase().includes('swim') ? '🏊' : '⚡'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">{s.name}</p>
+                      <p className="text-xs text-gray-400">{dateStr} · {timeStr}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-bold text-white">{s.durationMin} min</p>
+                      {s.calories !== null && (
+                        <p className="text-xs text-orange-400">{s.calories} kcal</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* M.E.D. toggle — only on training days */}
       {!day.isRest && (

@@ -64,8 +64,8 @@ export async function fetchDailyMetrics(
   const body = {
     aggregateBy: [
       {
+        // No dataSourceId → Google Fit merges ALL step sources (matches the app total)
         dataTypeName: 'com.google.step_count.delta',
-        dataSourceId: 'derived:com.google.step_count.delta:com.google.android.gms:estimated_steps',
       },
       {
         dataTypeName: 'com.google.calories.expended',
@@ -117,4 +117,126 @@ export async function fetchDailyMetrics(
     activeCalories: Math.round(activeCalories),
     sleepHours: Math.round((sleepMs / 3_600_000) * 10) / 10,
   };
+}
+
+// Human-readable labels for the activity types we care about
+const ACTIVITY_LABELS: Record<number, string> = {
+  1:   'Aerobics',
+  3:   'Biking',
+  7:   'Running',
+  8:   'Running (treadmill)',
+  9:   'Rowing',
+  17:  'Cross training',
+  21:  'Elliptical',
+  26:  'Gymnastics',
+  29:  'Hiking',
+  35:  'Jump rope',
+  42:  'Martial arts',
+  45:  'Pilates',
+  63:  'Swimming',
+  64:  'Swimming (pool)',
+  74:  'Volleyball',
+  82:  'Walking',
+  83:  'Walking (fitness)',
+  84:  'Walking (Nordic)',
+  85:  'Walking (treadmill)',
+  93:  'Stretching',
+  97:  'Weight training',
+  99:  'Yoga',
+  108: 'HIIT',
+};
+
+export interface WorkoutSession {
+  id: string;
+  name: string;
+  activityType: number;
+  activityLabel: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  durationMin: number;
+  calories: number | null;
+}
+
+/**
+ * Fetch workout sessions from Google Fit for a date range.
+ * Uses the Sessions API (not the Aggregation API).
+ *
+ * @param accessToken  - Valid OAuth2 access token
+ * @param refreshToken - Refresh token
+ * @param startDate    - 'YYYY-MM-DD' (inclusive)
+ * @param endDate      - 'YYYY-MM-DD' (inclusive), defaults to startDate
+ */
+export async function fetchWorkoutSessions(
+  accessToken: string,
+  refreshToken: string | null | undefined,
+  startDate: string,
+  endDate?: string,
+): Promise<WorkoutSession[]> {
+  const client = createOAuth2Client();
+  client.setCredentials({
+    access_token: accessToken,
+    refresh_token: refreshToken ?? undefined,
+  });
+
+  const startMs = new Date(`${startDate}T00:00:00`).getTime();
+  const endMs   = new Date(`${endDate ?? startDate}T23:59:59`).getTime();
+
+  const fitness = google.fitness({ version: 'v1', auth: client });
+
+  const sessionsResp = await fitness.users.sessions.list({
+    userId: 'me',
+    startTime: new Date(startMs).toISOString(),
+    endTime:   new Date(endMs).toISOString(),
+  });
+
+  const sessions = sessionsResp.data.session ?? [];
+
+  // Fetch calories for each session via aggregation bucketed by session
+  const results: WorkoutSession[] = [];
+
+  for (const s of sessions) {
+    const activityType = s.activityType ?? 0;
+    const sessStart = Number(s.startTimeMillis);
+    const sessEnd   = Number(s.endTimeMillis);
+    const durationMin = Math.round((sessEnd - sessStart) / 60_000);
+
+    // Get calories for this session window
+    let calories: number | null = null;
+    try {
+      const calResp = await fitness.users.dataset.aggregate({
+        userId: 'me',
+        requestBody: {
+          aggregateBy: [{ dataTypeName: 'com.google.calories.expended' }],
+          bucketByTime: { durationMillis: String(sessEnd - sessStart) },
+          startTimeMillis: String(sessStart),
+          endTimeMillis:   String(sessEnd),
+        },
+      });
+      let cal = 0;
+      for (const bucket of calResp.data.bucket ?? []) {
+        for (const dataset of bucket.dataset ?? []) {
+          for (const point of dataset.point ?? []) {
+            cal += point.value?.[0]?.fpVal ?? 0;
+          }
+        }
+      }
+      if (cal > 0) calories = Math.round(cal);
+    } catch {
+      // calories optional — don't fail the whole fetch
+    }
+
+    results.push({
+      id:            s.id ?? `${sessStart}`,
+      name:          s.name ?? ACTIVITY_LABELS[activityType] ?? 'Workout',
+      activityType,
+      activityLabel: ACTIVITY_LABELS[activityType] ?? `Activity ${activityType}`,
+      startTimeMs:   sessStart,
+      endTimeMs:     sessEnd,
+      durationMin,
+      calories,
+    });
+  }
+
+  // Most recent first
+  return results.sort((a, b) => b.startTimeMs - a.startTimeMs);
 }
