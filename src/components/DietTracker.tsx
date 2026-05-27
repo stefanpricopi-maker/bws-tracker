@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 // ── Targets ────────────────────────────────────────────────────────────────
 const TARGETS = {
@@ -80,6 +80,10 @@ export default function DietTracker() {
   const [form,   setForm]     = useState({ calories: '', protein: '', carbs: '', fat: '' });
   const [saving, setSaving]   = useState(false);
   const [status, setStatus]   = useState<'idle' | 'ok' | 'err'>('idle');
+  const [scanning, setScanning]   = useState(false);
+  const [scanStatus, setScanStatus] = useState<'idle' | 'ok' | 'err'>('idle');
+  const [preview, setPreview]     = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load today's data on mount
   useEffect(() => {
@@ -104,6 +108,59 @@ export default function DietTracker() {
       })
       .catch(() => {/* silently fail — network may be unavailable in dev */});
   }, []);
+
+  async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Show preview
+    const objectUrl = URL.createObjectURL(file);
+    setPreview(objectUrl);
+    setScanStatus('idle');
+    setScanning(true);
+
+    try {
+      // Convert to base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          // Strip the data URL prefix → keep only the base64 payload
+          resolve(result.split(',')[1] ?? '');
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetch('/api/vision', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64, mimeType: file.type || 'image/jpeg' }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+
+      const macros = await res.json() as { calories: number; protein: number; carbs: number; fat: number };
+
+      // Auto-fill the form fields
+      setForm({
+        calories: macros.calories > 0 ? String(macros.calories) : '',
+        protein:  macros.protein  > 0 ? String(macros.protein)  : '',
+        carbs:    macros.carbs    > 0 ? String(macros.carbs)    : '',
+        fat:      macros.fat      > 0 ? String(macros.fat)      : '',
+      });
+      setScanStatus('ok');
+    } catch {
+      setScanStatus('err');
+    } finally {
+      setScanning(false);
+      // Reset file input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
 
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -202,9 +259,69 @@ export default function DietTracker() {
 
       {/* Input form */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
-          Log today's intake
-        </span>
+        {/* Section header + scan button */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
+            Log today's intake
+          </span>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={scanning}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold
+                       bg-violet-600/20 border border-violet-500/40 text-violet-300
+                       hover:bg-violet-600/30 active:bg-violet-600/40
+                       disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {scanning ? (
+              <>
+                <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10"/>
+                </svg>
+                Scanning…
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+                Scan Meal
+              </>
+            )}
+          </button>
+          {/* Hidden file input — accept images, prefer camera on mobile */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleImageChange}
+          />
+        </div>
+
+        {/* Image preview + scan feedback */}
+        {preview && (
+          <div className="relative rounded-xl overflow-hidden border border-gray-700">
+            <img src={preview} alt="Meal preview" className="w-full max-h-48 object-cover" />
+            {scanning && (
+              <div className="absolute inset-0 bg-gray-900/70 flex items-center justify-center">
+                <span className="text-sm font-semibold text-violet-300 animate-pulse">Analyzing…</span>
+              </div>
+            )}
+            {scanStatus === 'ok' && (
+              <div className="absolute bottom-0 inset-x-0 bg-green-500/20 border-t border-green-500/40 px-3 py-1.5">
+                <p className="text-xs font-semibold text-green-400">✓ Macros detected — fields pre-filled</p>
+              </div>
+            )}
+            {scanStatus === 'err' && (
+              <div className="absolute bottom-0 inset-x-0 bg-red-500/20 border-t border-red-500/40 px-3 py-1.5">
+                <p className="text-xs font-semibold text-red-400">⚠ Could not analyze image — fill manually</p>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2">
           {([ ['calories', 'Calories (kcal)'], ['protein', 'Protein (g)'], ['carbs', 'Carbs (g)'], ['fat', 'Fat (g)'] ] as [keyof typeof form, string][]).map(
