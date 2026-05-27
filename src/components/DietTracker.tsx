@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 // ── Targets ────────────────────────────────────────────────────────────────
 const TARGETS = {
@@ -75,6 +75,77 @@ interface Intake {
 
 const EMPTY: Intake = { calories: 0, protein: 0, carbs: 0, fat: 0 };
 
+interface SyncWearableButtonProps {
+  onActiveBurn: (kcal: number) => void;
+}
+
+function SyncWearableButton({ onActiveBurn }: SyncWearableButtonProps) {
+  const [syncing, setSyncing]     = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [synced, setSynced]       = useState(false);
+
+  async function handleSync() {
+    setSyncing(true);
+    setSyncError(null);
+    setSynced(false);
+    try {
+      const res = await fetch(`/api/sync/google-fit?date=${today()}`);
+      const data = await res.json() as { activeCalories?: number; error?: string; message?: string };
+      if (!res.ok) {
+        if (data.error === 'not_connected' || data.error === 'token_expired') {
+          window.location.href = '/api/auth/google/login';
+          return;
+        }
+        throw new Error(data.message ?? 'Sync failed');
+      }
+      onActiveBurn(data.activeCalories ?? 0);
+      setSynced(true);
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : 'Sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        type="button"
+        onClick={handleSync}
+        disabled={syncing}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold
+                   bg-violet-600/20 border border-violet-500/40 text-violet-300
+                   hover:bg-violet-600/30 active:bg-violet-600/40
+                   disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        {syncing ? (
+          <>
+            <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10"/>
+            </svg>
+            Syncing…
+          </>
+        ) : synced ? (
+          <>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Connected ✓
+          </>
+        ) : (
+          <>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+            Sync Wearable
+          </>
+        )}
+      </button>
+      {syncError && <p className="text-xs text-red-400">{syncError}</p>}
+    </div>
+  );
+}
+
 export default function DietTracker() {
   const [logged, setLogged]   = useState<Intake>(EMPTY);
   const [form,   setForm]     = useState({ calories: '', protein: '', carbs: '', fat: '' });
@@ -83,7 +154,9 @@ export default function DietTracker() {
   const [scanning, setScanning]   = useState(false);
   const [scanStatus, setScanStatus] = useState<'idle' | 'ok' | 'err'>('idle');
   const [preview, setPreview]     = useState<string | null>(null);
+  const [activeBurn, setActiveBurn] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleActiveBurn = useCallback((kcal: number) => setActiveBurn(kcal), []);
 
   // Load today's data on mount
   useEffect(() => {
@@ -257,6 +330,21 @@ export default function DietTracker() {
         <MacroBar label="Fat"     consumed={logged.fat}     target={TARGETS.fat}     unit="g" color="bg-rose-500" />
       </div>
 
+      {/* Active burn banner (shown after wearable sync) */}
+      {activeBurn !== null && (
+        <div
+          className="rounded-xl px-4 py-3 flex flex-col gap-0.5"
+          style={{ backgroundColor: '#1f1a0e', border: '1px solid #78350f' }}
+        >
+          <p className="text-xs font-semibold text-amber-400">
+            🔥 Active burn today: {activeBurn.toLocaleString()} kcal
+          </p>
+          <p className="text-xs text-amber-300/70">
+            Your net target is <span className="font-bold text-amber-300">{(TARGETS.calories + activeBurn).toLocaleString()} kcal</span> — eat more to compensate.
+          </p>
+        </div>
+      )}
+
       {/* Input form */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         {/* Section header + scan button */}
@@ -264,6 +352,8 @@ export default function DietTracker() {
           <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
             Log today's intake
           </span>
+          <div className="flex items-center gap-2">
+          <SyncWearableButton onActiveBurn={handleActiveBurn} />
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -299,6 +389,7 @@ export default function DietTracker() {
             className="hidden"
             onChange={handleImageChange}
           />
+          </div>
         </div>
 
         {/* Image preview + scan feedback */}

@@ -7,6 +7,77 @@ function clamp(v: number, min = 0, max = 100) {
   return Math.min(max, Math.max(min, v));
 }
 
+interface SyncButtonProps {
+  onSync: (steps: number) => void;
+}
+
+function SyncButton({ onSync }: SyncButtonProps) {
+  const [syncing, setSyncing]     = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [synced, setSynced]       = useState(false);
+
+  async function handleSync() {
+    setSyncing(true);
+    setSyncError(null);
+    setSynced(false);
+    try {
+      const res = await fetch(`/api/sync/google-fit?date=${today()}`);
+      const data = await res.json() as { steps?: number; error?: string; message?: string };
+      if (!res.ok) {
+        if (data.error === 'not_connected' || data.error === 'token_expired') {
+          window.location.href = '/api/auth/google/login';
+          return;
+        }
+        throw new Error(data.message ?? 'Sync failed');
+      }
+      onSync(data.steps ?? 0);
+      setSynced(true);
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : 'Sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        type="button"
+        onClick={handleSync}
+        disabled={syncing}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold
+                   bg-violet-600/20 border border-violet-500/40 text-violet-300
+                   hover:bg-violet-600/30 active:bg-violet-600/40
+                   disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        {syncing ? (
+          <>
+            <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10"/>
+            </svg>
+            Syncing…
+          </>
+        ) : synced ? (
+          <>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Connected ✓
+          </>
+        ) : (
+          <>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+            Sync Wearable
+          </>
+        )}
+      </button>
+      {syncError && <p className="text-xs text-red-400">{syncError}</p>}
+    </div>
+  );
+}
+
 export default function StepTracker() {
   const [steps,  setSteps]  = useState(0);
   const [input,  setInput]  = useState('');
@@ -110,9 +181,12 @@ export default function StepTracker() {
 
       {/* Input form */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
-          Log today's steps
-        </span>
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
+            Log today's steps
+          </span>
+          <SyncButton onSync={(s) => { setSteps(s); setInput(s.toString()); }} />
+        </div>
         <div className="flex gap-2">
           <input
             type="number"

@@ -71,3 +71,15 @@ export const userGoals = sqliteTable('user_goals', {
 
 export type UserGoals = typeof userGoals.$inferSelect;
 export type NewUserGoals = typeof userGoals.$inferInsert;
+
+export const googleTokens = sqliteTable('google_tokens', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  accessToken: text('access_token').notNull(),
+  refreshToken: text('refresh_token'),
+  expiryDate: integer('expiry_date'), // Unix ms timestamp
+  updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
+export type GoogleTokens = typeof googleTokens.$inferSelect;
+export type NewGoogleTokens = typeof googleTokens.$inferInsert;
