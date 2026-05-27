@@ -3,6 +3,7 @@ import WeightTrend    from './WeightTrend';
 import DietTracker    from './DietTracker';
 import StepTracker    from './StepTracker';
 import WorkoutLogger  from './WorkoutLogger';
+import BWSScore       from './BWSScore';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
@@ -40,6 +41,8 @@ function ProfileStub() {
 function DashboardTab() {
   return (
     <div className="flex flex-col gap-8">
+      <BWSScore />
+      <hr style={{ borderColor: '#2a2f45' }} />
       <WeightTrend />
       <hr style={{ borderColor: '#2a2f45' }} />
       <StepTracker />
