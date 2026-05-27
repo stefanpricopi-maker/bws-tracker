@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 interface SetInput {
   weight: string;
   reps: string;
+  setLabel: string; // e.g. "1", "Activation", "Mini 1"
 }
 
 interface ExerciseLog {
@@ -19,6 +20,7 @@ interface DayConfig {
   label: string;
   dayType: string;
   exercises: string[];
+  medExercise: string; // primary compound for M.E.D. protocol
   isRest: boolean;
 }
 
@@ -36,6 +38,7 @@ const SPLIT: DayConfig[] = [
       'Tricep Pushdowns',
       'Overhead Tricep Extensions',
     ],
+    medExercise: 'Overhead Tricep Extensions',
     isRest: false,
   },
   {
@@ -49,6 +52,7 @@ const SPLIT: DayConfig[] = [
       'Barbell Curl',
       'Hammer Curl',
     ],
+    medExercise: 'Barbell Row',
     isRest: false,
   },
   {
@@ -61,12 +65,14 @@ const SPLIT: DayConfig[] = [
       'Leg Curl',
       'Calf Raises',
     ],
+    medExercise: 'Barbell Squat',
     isRest: false,
   },
   {
     label: 'Day 4 — Rest',
     dayType: 'Rest',
     exercises: [],
+    medExercise: '',
     isRest: true,
   },
   {
@@ -79,6 +85,7 @@ const SPLIT: DayConfig[] = [
       'Tricep Dips',
       'Concentration Curl',
     ],
+    medExercise: 'Incline Dumbbell Curl',
     isRest: false,
   },
   {
@@ -91,12 +98,14 @@ const SPLIT: DayConfig[] = [
       'Preacher Curl',
       'Seated Calf Raise',
     ],
+    medExercise: 'Crossbody Hammer Curl',
     isRest: false,
   },
   {
     label: 'Day 7 — Rest',
     dayType: 'Rest',
     exercises: [],
+    medExercise: '',
     isRest: true,
   },
 ];
@@ -139,15 +148,26 @@ function getBadge(exercise: ExerciseLog, sets: SetInput[]): Badge | null {
 }
 
 const EMPTY_SETS = (): SetInput[] => [
-  { weight: '', reps: '' },
-  { weight: '', reps: '' },
-  { weight: '', reps: '' },
+  { weight: '', reps: '', setLabel: '1' },
+  { weight: '', reps: '', setLabel: '2' },
+  { weight: '', reps: '', setLabel: '3' },
 ];
 
-function buildExerciseLogs(day: DayConfig): ExerciseLog[] {
-  return day.exercises.map((name) => ({
+// Myo-Reps: 1 activation set to near-failure + 3 cluster mini-sets
+const MYO_SETS = (): SetInput[] => [
+  { weight: '', reps: '', setLabel: 'ACT' },
+  { weight: '', reps: '', setLabel: 'M1' },
+  { weight: '', reps: '', setLabel: 'M2' },
+  { weight: '', reps: '', setLabel: 'M3' },
+];
+
+function buildExerciseLogs(day: DayConfig, medMode = false): ExerciseLog[] {
+  const list = medMode && day.medExercise
+    ? [day.medExercise]
+    : day.exercises;
+  return list.map((name) => ({
     name,
-    sets: EMPTY_SETS(),
+    sets: medMode ? MYO_SETS() : EMPTY_SETS(),
     lastWeight: null,
     lastReps: null,
     lastDate: null,
@@ -157,20 +177,24 @@ function buildExerciseLogs(day: DayConfig): ExerciseLog[] {
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function WorkoutLogger() {
-  const [selectedDay, setSelectedDay] = useState(0); // 0-indexed
+  const [selectedDay, setSelectedDay] = useState(0);
+  const [medMode, setMedMode] = useState(false);
   const [exercises, setExercises] = useState<ExerciseLog[]>(() =>
-    buildExerciseLogs(SPLIT[0]),
+    buildExerciseLogs(SPLIT[0], false),
   );
   const [loadingPrev, setLoadingPrev] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const fetchPrevStats = useCallback(async (day: DayConfig) => {
+  const fetchPrevStats = useCallback(async (day: DayConfig, isMed: boolean) => {
     if (day.isRest) return;
     setLoadingPrev(true);
+    const exerciseNames = isMed && day.medExercise
+      ? [day.medExercise]
+      : day.exercises;
     try {
       const results = await Promise.all(
-        day.exercises.map((name) =>
+        exerciseNames.map((name) =>
           fetch(`/api/workouts?exercise_name=${encodeURIComponent(name)}`)
             .then((r) => r.json())
             .catch(() => ({ lastWeight: null, lastReps: null, lastDate: null })),
@@ -189,13 +213,13 @@ export default function WorkoutLogger() {
     }
   }, []);
 
-  // When day changes, reset exercise logs and fetch previous stats
+  // Rebuild exercise list when day or MED mode changes
   useEffect(() => {
     const day = SPLIT[selectedDay];
-    const fresh = buildExerciseLogs(day);
+    const fresh = buildExerciseLogs(day, medMode);
     setExercises(fresh);
-    fetchPrevStats(day);
-  }, [selectedDay, fetchPrevStats]);
+    fetchPrevStats(day, medMode);
+  }, [selectedDay, medMode, fetchPrevStats]);
 
   function handleSetChange(
     exIdx: number,
@@ -248,11 +272,15 @@ export default function WorkoutLogger() {
       const res = await fetch('/api/workouts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: today, dayType: day.dayType, sets }),
+        body: JSON.stringify({
+          date: today,
+          dayType: medMode ? `${day.dayType} (M.E.D.)` : day.dayType,
+          sets,
+        }),
       });
       if (!res.ok) throw new Error('Server error');
-      showToast('Workout saved!');
-      setExercises(buildExerciseLogs(day));
+      showToast(medMode ? 'M.E.D. session saved! Every rep counts. 💪' : 'Workout saved!');
+      setExercises(buildExerciseLogs(day, medMode));
     } catch {
       showToast('Failed to save — please try again.');
     } finally {
@@ -290,6 +318,49 @@ export default function WorkoutLogger() {
       {/* Day label */}
       <h2 className="text-base font-bold text-white">{day.label}</h2>
 
+      {/* M.E.D. toggle — only on training days */}
+      {!day.isRest && (
+        <button
+          onClick={() => setMedMode((v) => !v)}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all duration-200
+            ${medMode
+              ? 'bg-amber-500/10 border-amber-500/50 text-amber-400'
+              : 'bg-gray-800/60 border-gray-700/60 text-gray-400 hover:border-gray-600 hover:text-gray-300'
+            }`}
+        >
+          {/* Toggle pill */}
+          <div className={`relative w-10 h-5 rounded-full transition-colors duration-200 flex-shrink-0
+            ${medMode ? 'bg-amber-500' : 'bg-gray-600'}`}
+          >
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200
+              ${medMode ? 'translate-x-5' : 'translate-x-0.5'}`}
+            />
+          </div>
+          <div className="flex flex-col items-start gap-0.5 min-w-0">
+            <span className="text-xs font-bold tracking-wide">
+              ⚡ Short on Time — M.E.D. Protocol
+            </span>
+            <span className="text-[10px] leading-tight opacity-70">
+              {medMode
+                ? `1 compound · Myo-Reps · ~15 min`
+                : 'Tap to activate Minimum Effective Dose mode'}
+            </span>
+          </div>
+        </button>
+      )}
+
+      {/* M.E.D. disclaimer */}
+      {medMode && !day.isRest && (
+        <div className="flex gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/5 border border-amber-500/20">
+          <span className="text-amber-400 text-sm flex-shrink-0 mt-0.5">ℹ️</span>
+          <p className="text-[11px] text-amber-300/70 leading-relaxed">
+            <strong className="text-amber-300">M.E.D. preserves muscle mass</strong> when a full session isn't possible.
+            One heavy compound with Myo-Reps (activation set → 3 cluster mini-sets, 10s rest between)
+            delivers enough stimulus to prevent regression. Always better than skipping entirely.
+          </p>
+        </div>
+      )}
+
       {/* Rest day message */}
       {day.isRest ? (
         <div className="flex flex-col items-center gap-3 py-16 text-center">
@@ -308,8 +379,13 @@ export default function WorkoutLogger() {
             <div key={ex.name} className="bg-gray-800 rounded-2xl border border-gray-700 p-4 flex flex-col gap-3">
               {/* Exercise header */}
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-semibold text-white text-sm">{ex.name}</h3>
+                  {medMode && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                      M.E.D.
+                    </span>
+                  )}
                   {badge && (
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full bg-opacity-20 ${badge.color}`}>
                       {badge.label}
@@ -328,33 +404,60 @@ export default function WorkoutLogger() {
               {/* Set rows */}
               <div className="flex flex-col gap-2">
                 {/* Column headers */}
-                <div className="grid grid-cols-[32px_1fr_1fr] gap-2 items-center">
+                <div className="grid grid-cols-[40px_1fr_1fr] gap-2 items-center">
                   <span className="text-xs text-gray-500 text-center">Set</span>
                   <span className="text-xs text-gray-500 text-center">Weight (kg)</span>
                   <span className="text-xs text-gray-500 text-center">Reps</span>
                 </div>
 
-                {ex.sets.map((s, si) => (
-                  <div key={si} className="grid grid-cols-[32px_1fr_1fr] gap-2 items-center">
-                    <span className="text-xs font-medium text-gray-400 text-center">{si + 1}</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      placeholder="0"
-                      value={s.weight}
-                      onChange={(e) => handleSetChange(exIdx, si, 'weight', e.target.value)}
-                      className="min-h-[44px] bg-gray-900 border border-gray-700 rounded-xl text-white text-sm text-center placeholder-gray-600 focus:outline-none focus:border-violet-500 transition-colors w-full"
-                    />
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={s.reps}
-                      onChange={(e) => handleSetChange(exIdx, si, 'reps', e.target.value)}
-                      className="min-h-[44px] bg-gray-900 border border-gray-700 rounded-xl text-white text-sm text-center placeholder-gray-600 focus:outline-none focus:border-violet-500 transition-colors w-full"
-                    />
-                  </div>
-                ))}
+                {ex.sets.map((s, si) => {
+                  const isMiniSet = s.setLabel.startsWith('M');
+                  const isActivation = s.setLabel === 'ACT';
+                  return (
+                    <div key={si}>
+                      {/* 10s rest hint before mini-sets */}
+                      {isMiniSet && si === 1 && (
+                        <p className="text-[10px] text-amber-400/70 text-center mb-1.5">
+                          ⏱ 10 sec rest between mini-sets
+                        </p>
+                      )}
+                      <div className="grid grid-cols-[40px_1fr_1fr] gap-2 items-center">
+                        <span className={`text-[10px] font-bold text-center leading-none px-0.5
+                          ${isActivation ? 'text-amber-400' : isMiniSet ? 'text-violet-400' : 'text-gray-400'}`}>
+                          {s.setLabel}
+                        </span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          placeholder={isActivation ? 'heavy' : '0'}
+                          value={s.weight}
+                          onChange={(e) => handleSetChange(exIdx, si, 'weight', e.target.value)}
+                          className={`min-h-[44px] bg-gray-900 rounded-xl text-white text-sm text-center placeholder-gray-600 focus:outline-none transition-colors w-full
+                            ${isActivation
+                              ? 'border border-amber-500/50 focus:border-amber-400'
+                              : isMiniSet
+                                ? 'border border-violet-700/50 focus:border-violet-500'
+                                : 'border border-gray-700 focus:border-violet-500'
+                            }`}
+                        />
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          placeholder={isActivation ? 'fail' : '3–5'}
+                          value={s.reps}
+                          onChange={(e) => handleSetChange(exIdx, si, 'reps', e.target.value)}
+                          className={`min-h-[44px] bg-gray-900 rounded-xl text-white text-sm text-center placeholder-gray-600 focus:outline-none transition-colors w-full
+                            ${isActivation
+                              ? 'border border-amber-500/50 focus:border-amber-400'
+                              : isMiniSet
+                                ? 'border border-violet-700/50 focus:border-violet-500'
+                                : 'border border-gray-700 focus:border-violet-500'
+                            }`}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
             );
