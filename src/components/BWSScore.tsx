@@ -128,29 +128,33 @@ interface BarProps {
 function BreakdownBar({ label, value, max, color }: BarProps) {
   const pct = Math.round((value / max) * 100);
   return (
-    <div className="flex items-center gap-3">
-      <span className="w-44 shrink-0 text-xs text-gray-400 leading-tight">{label}</span>
-      <div className="flex-1 h-2 rounded-full bg-gray-700/60 overflow-hidden">
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-gray-400 leading-tight">{label}</span>
+        <span className="shrink-0 text-xs font-semibold text-gray-300 tabular-nums ml-2">
+          {value} / {max}
+        </span>
+      </div>
+      <div className="h-1.5 rounded-full bg-gray-700/60 overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-500"
           style={{ width: `${pct}%`, backgroundColor: color }}
         />
       </div>
-      <span className="w-12 text-right text-xs text-gray-300 tabular-nums">
-        {value} / {max}
-      </span>
     </div>
   );
 }
 
 function BreakdownSkeleton() {
   return (
-    <div className="flex flex-col gap-3 animate-pulse">
+    <div className="w-full flex flex-col gap-3 animate-pulse">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="flex items-center gap-3">
-          <div className="w-28 h-3 rounded bg-gray-700/60" />
-          <div className="flex-1 h-2 rounded bg-gray-700/60" />
-          <div className="w-12 h-3 rounded bg-gray-700/60" />
+        <div key={i} className="flex flex-col gap-1">
+          <div className="flex justify-between">
+            <div className="h-3 w-36 rounded bg-gray-700/60" />
+            <div className="h-3 w-10 rounded bg-gray-700/60" />
+          </div>
+          <div className="h-1.5 w-full rounded bg-gray-700/60" />
         </div>
       ))}
     </div>
@@ -224,7 +228,7 @@ export default function BWSScore() {
       </div>
 
       {/* Hero ring + breakdown */}
-      <div className="flex flex-col sm:flex-row items-center gap-6">
+      <div className="flex flex-col items-center gap-5">
         {/* Ring */}
         {loading ? (
           <ScoreRingSkeleton />
@@ -234,8 +238,8 @@ export default function BWSScore() {
           <ScoreRingSkeleton />
         )}
 
-        {/* Breakdown bars */}
-        <div className="flex-1 w-full flex flex-col gap-3">
+        {/* Breakdown bars — full width below the ring */}
+        <div className="w-full flex flex-col gap-3">
           {loading || !data ? (
             <BreakdownSkeleton />
           ) : (
