@@ -8,6 +8,20 @@
       "when": 1779805895785,
       "tag": "0000_dry_robbie_robertson",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1779875469196,
+      "tag": "0001_old_sphinx",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1779875530164,
+      "tag": "0002_loud_vengeance",
+      "breakpoints": true
     }
   ]
 }

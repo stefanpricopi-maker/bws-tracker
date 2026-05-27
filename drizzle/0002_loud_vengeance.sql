@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `user_goals_user_id_unique` ON `user_goals` (`user_id`);

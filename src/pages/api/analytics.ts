@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../db';
-import { dailyLogs, workouts } from '../../db/schema';
+import { dailyLogs, workouts, userGoals } from '../../db/schema';
 import { eq, and, gte, desc } from 'drizzle-orm';
 
 const USER_ID = 1;
@@ -11,6 +11,12 @@ function clamp(val: number, min: number, max: number) {
 
 export const GET: APIRoute = () => {
   const now = new Date();
+
+  // ── User goals (fall back to defaults if not set) ───────────────────────
+  const goals = db.select().from(userGoals).where(eq(userGoals.userId, USER_ID)).get() ?? null;
+  const targetCalories = goals?.targetCaloriesKcal ?? 1850;
+  const targetProtein = goals?.targetProteinG ?? 180;
+  const targetSteps = goals?.targetSteps ?? 10000;
 
   const cutoff30 = new Date(now);
   cutoff30.setDate(cutoff30.getDate() - 30);
@@ -106,10 +112,10 @@ export const GET: APIRoute = () => {
   const weightProgress = Math.round(
     clamp(1 - Math.abs(weightDelta7d ?? 0) / 0.5, 0, 1) * 25,
   );
-  const nutritionScore = Math.round(clamp(avgCalories7d / 1850, 0, 1) * 25);
-  const proteinScore = Math.round(clamp(avgProtein7d / 180, 0, 1) * 25);
+  const nutritionScore = Math.round(clamp(avgCalories7d / targetCalories, 0, 1) * 25);
+  const proteinScore = Math.round(clamp(avgProtein7d / targetProtein, 0, 1) * 25);
   const activityScore = Math.round(
-    clamp(avgSteps7d / 10000, 0, 1) * 12.5 + clamp(workoutsLast7d / 4, 0, 1) * 12.5,
+    clamp(avgSteps7d / targetSteps, 0, 1) * 12.5 + clamp(workoutsLast7d / 4, 0, 1) * 12.5,
   );
 
   const bwsScore = Math.round(weightProgress + nutritionScore + proteinScore + activityScore);
@@ -130,6 +136,11 @@ export const GET: APIRoute = () => {
       nutritionScore,
       proteinScore,
       activityScore,
+    },
+    targets: {
+      calories: targetCalories,
+      protein: targetProtein,
+      steps: targetSteps,
     },
   };
 

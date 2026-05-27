@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import WeightTrend    from './WeightTrend';
-import DietTracker    from './DietTracker';
-import StepTracker    from './StepTracker';
-import WorkoutLogger  from './WorkoutLogger';
-import BWSScore       from './BWSScore';
+import WeightTrend      from './WeightTrend';
+import DietTracker      from './DietTracker';
+import StepTracker      from './StepTracker';
+import WorkoutLogger    from './WorkoutLogger';
+import BWSScore         from './BWSScore';
+import ProfileSettings  from './ProfileSettings';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
@@ -21,20 +22,6 @@ const NAV: NavItem[] = [
   { id: 'diet',      label: 'Diet',      icon: '🥗'  },
   { id: 'profile',   label: 'Profile',   icon: '👤'  },
 ];
-
-// ── Profile stub ───────────────────────────────────────────────────────────
-
-function ProfileStub() {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 pt-20 text-center text-gray-500">
-      <span className="text-5xl">👤</span>
-      <p className="font-semibold text-white">Profile</p>
-      <p className="text-sm max-w-xs">
-        Coming in a later phase — user settings, goals, and TDEE configuration.
-      </p>
-    </div>
-  );
-}
 
 // ── Dashboard tab content ──────────────────────────────────────────────────
 
@@ -83,7 +70,7 @@ export default function Dashboard() {
         {active === 'dashboard' && <DashboardTab />}
         {active === 'workout'   && <WorkoutLogger />}
         {active === 'diet'      && <DietTracker />}
-        {active === 'profile'   && <ProfileStub />}
+        {active === 'profile'   && <ProfileSettings />}
       </div>
     </>
   );

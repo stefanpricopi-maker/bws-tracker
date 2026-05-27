@@ -54,3 +54,20 @@ export type NewWorkout = typeof workouts.$inferInsert;
 
 export type WorkoutSet = typeof workoutSets.$inferSelect;
 export type NewWorkoutSet = typeof workoutSets.$inferInsert;
+
+export const userGoals = sqliteTable('user_goals', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  targetWeightKg: real('target_weight_kg'),
+  weeklyWeightLossKg: real('weekly_weight_loss_kg').default(0.5),
+  tdeeKcal: integer('tdee_kcal'),
+  targetCaloriesKcal: integer('target_calories_kcal').default(1850),
+  targetProteinG: integer('target_protein_g').default(180),
+  targetCarbsG: integer('target_carbs_g').default(113),
+  targetFatG: integer('target_fat_g').default(75),
+  targetSteps: integer('target_steps').default(10000),
+  updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
+export type UserGoals = typeof userGoals.$inferSelect;
+export type NewUserGoals = typeof userGoals.$inferInsert;

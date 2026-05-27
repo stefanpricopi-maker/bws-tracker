@@ -19,6 +19,11 @@ interface AnalyticsData {
     proteinScore: number;
     activityScore: number;
   };
+  targets: {
+    calories: number;
+    protein: number;
+    steps: number;
+  };
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -124,7 +129,7 @@ function BreakdownBar({ label, value, max, color }: BarProps) {
   const pct = Math.round((value / max) * 100);
   return (
     <div className="flex items-center gap-3">
-      <span className="w-28 shrink-0 text-xs text-gray-400">{label}</span>
+      <span className="w-44 shrink-0 text-xs text-gray-400 leading-tight">{label}</span>
       <div className="flex-1 h-2 rounded-full bg-gray-700/60 overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-500"
@@ -236,9 +241,24 @@ export default function BWSScore() {
           ) : (
             <>
               <BreakdownBar label="Weight Pace" value={data.breakdown.weightProgress} max={25} color={color} />
-              <BreakdownBar label="Nutrition" value={data.breakdown.nutritionScore} max={25} color={color} />
-              <BreakdownBar label="Protein" value={data.breakdown.proteinScore} max={25} color={color} />
-              <BreakdownBar label="Activity" value={data.breakdown.activityScore} max={25} color={color} />
+              <BreakdownBar
+                label={`Nutrition (${data.avgCalories7d} / ${data.targets.calories} kcal)`}
+                value={data.breakdown.nutritionScore}
+                max={25}
+                color={color}
+              />
+              <BreakdownBar
+                label={`Protein (${data.avgProtein7d}g / ${data.targets.protein}g)`}
+                value={data.breakdown.proteinScore}
+                max={25}
+                color={color}
+              />
+              <BreakdownBar
+                label={`Activity (${data.avgSteps7d.toLocaleString()} / ${data.targets.steps.toLocaleString()} steps)`}
+                value={data.breakdown.activityScore}
+                max={25}
+                color={color}
+              />
             </>
           )}
         </div>
