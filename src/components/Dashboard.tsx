@@ -50,6 +50,7 @@ export default function Dashboard() {
                    flex items-center justify-around
                    border-b border-gray-800 bg-gray-900/95 backdrop-blur-sm
                    h-14"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         {NAV.map(({ id, label, icon }) => (
           <button
