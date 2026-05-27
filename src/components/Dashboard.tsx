@@ -5,6 +5,8 @@ import StepTracker      from './StepTracker';
 import WorkoutLogger    from './WorkoutLogger';
 import BWSScore         from './BWSScore';
 import ProfileSettings  from './ProfileSettings';
+import AlertBanner      from './AlertBanner';
+import WeeklySummary    from './WeeklySummary';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
@@ -28,6 +30,8 @@ const NAV: NavItem[] = [
 function DashboardTab() {
   return (
     <div className="flex flex-col gap-8">
+      <AlertBanner />
+      <WeeklySummary />
       <BWSScore />
       <hr style={{ borderColor: '#2a2f45' }} />
       <WeightTrend />

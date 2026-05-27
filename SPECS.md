@@ -177,35 +177,36 @@ cd mcp-server && npm run build        # Compile MCP server TypeScript
 - [x] **Phase 6A** — BWS Score: composite 0–100 score, SVG ring, breakdown bars, stats grid
 - [x] **Phase 6B** — Profile & Goals: `user_goals` table, TDEE calculator, targets saved to DB, score uses real targets
 - [x] **Phase 6C** — PWA: manifest, service worker, install prompt, iOS meta, mobile polish
+- [x] **Phase 7** — Data Intelligence: trend alerts, overload badges, weekly summary card, MCP intelligence tools
 
 ---
 
 ## Phase 7 — Data Intelligence & Insights
 
 ### 7.1 Trend Alerts
-- [ ] Detect stall: weight unchanged (< 0.1 kg Δ) for 5+ consecutive logged days
-- [ ] Detect under-eating: avg calories last 3 days < 80% of target
-- [ ] Detect inactivity: no workout logged in 4+ days
-- [ ] Detect step deficit: avg steps last 3 days < 60% of target
-- [ ] UI: colored alert banner on Dashboard tab (dismissible per-day, stored in localStorage)
-- [ ] API: `GET /api/alerts` — returns active alerts array
+- [x] Detect stall: weight unchanged (< 0.1 kg Δ) for 5+ consecutive logged days
+- [x] Detect under-eating: avg calories last 3 days < 80% of target
+- [x] Detect inactivity: no workout logged in 4+ days
+- [x] Detect step deficit: avg steps last 3 days < 60% of target
+- [x] UI: colored alert banner on Dashboard tab (dismissible per-day, stored in localStorage)
+- [x] API: `GET /api/alerts` — returns active alerts array
 
 ### 7.2 Progressive Overload Report (in WorkoutLogger)
-- [ ] After fetching previous session stats, compute delta vs current input in real-time
-- [ ] Show inline badge per exercise: `▲ +2.5 kg`, `▲ +1 rep`, `→ Same`, `▼ Dropped`
-- [ ] Badge appears after user fills in weight/reps for a set
-- [ ] Color: green for progress, gray for same, red for regression
+- [x] After fetching previous session stats, compute delta vs current input in real-time
+- [x] Show inline badge per exercise: `▲ +2.5 kg`, `▲ +1 rep`, `→ Same`, `▼ Dropped`
+- [x] Badge appears after user fills in weight/reps for a set
+- [x] Color: green for progress, gray for same, red for regression
 
 ### 7.3 Weekly Summary Card
-- [ ] API: `GET /api/weekly-summary` — aggregates current week (Mon–Sun):
+- [x] API: `GET /api/weekly-summary` — aggregates current week (Mon–Sun):
   - Weight lost this week (kg)
   - Workout count + days trained
   - Macro adherence % (calories, protein)
   - Best exercise this week (highest weight×reps volume delta vs previous week)
-- [ ] UI: `WeeklySummary.tsx` — collapsible card on Dashboard, shown every Monday auto-expanded
-- [ ] Generates human-readable summary string (e.g. "You lost 0.4 kg, hit protein 5/7 days, PR on Bench Press")
+- [x] UI: `WeeklySummary.tsx` — collapsible card on Dashboard, shown every Monday auto-expanded
+- [x] Generates human-readable summary string (e.g. "You lost 0.4 kg, hit protein 5/7 days, PR on Bench Press")
 
 ### 7.4 New MCP Tools
-- [ ] `get_weekly_summary` — returns current week aggregates (same data as API)
-- [ ] `get_overload_report` — accepts `exercise_name`, returns week-by-week volume (sets × reps × weight) trend, peak week, current week vs last week delta
-- [ ] Add both tools to `mcp-server/src/index.ts`, rebuild `dist/`
+- [x] `get_weekly_summary` — returns current week aggregates (same data as API)
+- [x] `get_overload_report` — accepts `exercise_name`, returns week-by-week volume (sets × reps × weight) trend, peak week, current week vs last week delta
+- [x] Add both tools to `mcp-server/src/index.ts`, rebuild `dist/`

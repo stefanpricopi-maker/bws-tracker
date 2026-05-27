@@ -101,6 +101,43 @@ const SPLIT: DayConfig[] = [
   },
 ];
 
+// ── Progressive overload badge ─────────────────────────────────────────────
+
+interface Badge {
+  label: string;
+  color: string;
+}
+
+function getBadge(exercise: ExerciseLog, sets: SetInput[]): Badge | null {
+  const set1 = sets[0];
+  if (!set1 || set1.weight === '') return null;
+  if (exercise.lastWeight === null) return null;
+
+  const currentWeight = parseFloat(set1.weight);
+  if (isNaN(currentWeight)) return null;
+
+  const currentReps = parseInt(set1.reps, 10);
+  const lastReps = exercise.lastReps ?? 0;
+
+  if (currentWeight > exercise.lastWeight) {
+    const diff = Math.round((currentWeight - exercise.lastWeight) * 100) / 100;
+    return { label: `▲ +${diff} kg`, color: 'text-green-400 bg-green-400/10' };
+  }
+  if (currentWeight === exercise.lastWeight) {
+    if (!isNaN(currentReps) && currentReps > lastReps) {
+      const diff = currentReps - lastReps;
+      return { label: `▲ +${diff} reps`, color: 'text-green-400 bg-green-400/10' };
+    }
+    if (!isNaN(currentReps) && currentReps === lastReps) {
+      return { label: '→ Same', color: 'text-gray-400 bg-gray-400/10' };
+    }
+  }
+  if (currentWeight < exercise.lastWeight) {
+    return { label: '▼ Dropped', color: 'text-red-400 bg-red-400/10' };
+  }
+  return null;
+}
+
 const EMPTY_SETS = (): SetInput[] => [
   { weight: '', reps: '' },
   { weight: '', reps: '' },
@@ -265,11 +302,20 @@ export default function WorkoutLogger() {
       ) : (
         <>
           {/* Exercise cards */}
-          {exercises.map((ex, exIdx) => (
+          {exercises.map((ex, exIdx) => {
+            const badge = getBadge(ex, ex.sets);
+            return (
             <div key={ex.name} className="bg-gray-800 rounded-2xl border border-gray-700 p-4 flex flex-col gap-3">
               {/* Exercise header */}
               <div>
-                <h3 className="font-semibold text-white text-sm">{ex.name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-white text-sm">{ex.name}</h3>
+                  {badge && (
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full bg-opacity-20 ${badge.color}`}>
+                      {badge.label}
+                    </span>
+                  )}
+                </div>
                 <p className="text-gray-500 text-xs mt-0.5">
                   {loadingPrev
                     ? 'Loading previous...'
@@ -311,7 +357,8 @@ export default function WorkoutLogger() {
                 ))}
               </div>
             </div>
-          ))}
+            );
+          })}
         </>
       )}
 
