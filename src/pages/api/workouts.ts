@@ -6,7 +6,7 @@ import { eq, desc, and } from 'drizzle-orm';
 const USER_ID = 1;
 
 // ── GET /api/workouts?exercise_name=Bench+Press ────────────────────────────
-export const GET: APIRoute = ({ url }) => {
+export const GET: APIRoute = async ({ url }) => {
   const exerciseName = url.searchParams.get('exercise_name');
 
   if (!exerciseName) {
@@ -17,14 +17,13 @@ export const GET: APIRoute = ({ url }) => {
   }
 
   // Find the most recent workout session that contains sets for this exercise
-  const latestWorkout = db
+  const [latestWorkout] = await db
     .select({ workoutId: workoutSets.workoutId, date: workouts.date })
     .from(workoutSets)
     .innerJoin(workouts, eq(workoutSets.workoutId, workouts.id))
     .where(and(eq(workouts.userId, USER_ID), eq(workoutSets.exerciseName, exerciseName)))
     .orderBy(desc(workouts.date))
-    .limit(1)
-    .get();
+    .limit(1);
 
   if (!latestWorkout) {
     return new Response(
@@ -34,7 +33,7 @@ export const GET: APIRoute = ({ url }) => {
   }
 
   // Get all sets from that workout for the given exercise, then pick max weight
-  const sets = db
+  const sets = await db
     .select()
     .from(workoutSets)
     .where(
@@ -42,8 +41,7 @@ export const GET: APIRoute = ({ url }) => {
         eq(workoutSets.workoutId, latestWorkout.workoutId),
         eq(workoutSets.exerciseName, exerciseName),
       ),
-    )
-    .all();
+    );
 
   const best = sets.reduce(
     (acc, s) => (s.weight > acc.weight ? s : acc),
@@ -77,11 +75,10 @@ export const POST: APIRoute = async ({ request }) => {
   const dayType = typeof body.dayType === 'string' ? body.dayType : 'Unknown';
   const rawSets = Array.isArray(body.sets) ? body.sets : [];
 
-  const [inserted] = db
+  const [inserted] = await db
     .insert(workouts)
     .values({ userId: USER_ID, date, dayType })
-    .returning({ id: workouts.id })
-    .all();
+    .returning({ id: workouts.id });
 
   const workoutId = inserted.id;
 
@@ -94,15 +91,14 @@ export const POST: APIRoute = async ({ request }) => {
       typeof s.reps === 'number' &&
       typeof s.setNumber === 'number'
     ) {
-      db.insert(workoutSets)
+      await db.insert(workoutSets)
         .values({
           workoutId,
           exerciseName: s.exerciseName,
           weight: s.weight,
           reps: s.reps,
           setNumber: s.setNumber,
-        })
-        .run();
+        });
     }
   }
 

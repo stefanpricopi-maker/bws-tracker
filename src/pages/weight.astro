@@ -10,12 +10,11 @@ import { eq, asc } from 'drizzle-orm';
 // For now we use user id=1 (will be replaced by session auth in a later phase)
 const USER_ID = 1;
 
-const rows = db
+const rows = await db
   .select({ date: dailyLogs.date, weight: dailyLogs.weightKg })
   .from(dailyLogs)
   .where(eq(dailyLogs.userId, USER_ID))
-  .orderBy(asc(dailyLogs.date))
-  .all();
+  .orderBy(asc(dailyLogs.date));
 
 const weightData = rows
   .filter((r): r is { date: string; weight: number } => r.weight != null)

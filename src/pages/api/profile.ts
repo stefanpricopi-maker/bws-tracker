@@ -5,8 +5,8 @@ import { eq } from 'drizzle-orm';
 
 const USER_ID = 1;
 
-export const GET: APIRoute = () => {
-  const user = db.select().from(users).where(eq(users.id, USER_ID)).get();
+export const GET: APIRoute = async () => {
+  const [user] = await db.select().from(users).where(eq(users.id, USER_ID)).limit(1);
   if (!user) {
     return new Response(JSON.stringify({ error: 'User not found' }), {
       status: 404,
@@ -14,7 +14,7 @@ export const GET: APIRoute = () => {
     });
   }
 
-  const goals = db.select().from(userGoals).where(eq(userGoals.userId, USER_ID)).get() ?? null;
+  const [goals = null] = await db.select().from(userGoals).where(eq(userGoals.userId, USER_ID)).limit(1);
 
   const payload = {
     name: user.name,
@@ -43,7 +43,7 @@ export const POST: APIRoute = async ({ request }) => {
   const body = (await request.json()) as Partial<NewUserGoals> & { name?: string };
 
   if (body.name !== undefined) {
-    db.update(users).set({ name: body.name }).where(eq(users.id, USER_ID)).run();
+    await db.update(users).set({ name: body.name }).where(eq(users.id, USER_ID));
   }
 
   const insertValues: NewUserGoals = {
@@ -69,10 +69,9 @@ export const POST: APIRoute = async ({ request }) => {
   if (body.targetFatG !== undefined) updateSet.targetFatG = body.targetFatG;
   if (body.targetSteps !== undefined) updateSet.targetSteps = body.targetSteps;
 
-  db.insert(userGoals)
+  await db.insert(userGoals)
     .values(insertValues)
-    .onConflictDoUpdate({ target: userGoals.userId, set: updateSet })
-    .run();
+    .onConflictDoUpdate({ target: userGoals.userId, set: updateSet });
 
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,

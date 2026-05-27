@@ -9,11 +9,11 @@ function clamp(val: number, min: number, max: number) {
   return Math.min(Math.max(val, min), max);
 }
 
-export const GET: APIRoute = () => {
+export const GET: APIRoute = async () => {
   const now = new Date();
 
   // ── User goals (fall back to defaults if not set) ───────────────────────
-  const goals = db.select().from(userGoals).where(eq(userGoals.userId, USER_ID)).get() ?? null;
+  const [goals = null] = await db.select().from(userGoals).where(eq(userGoals.userId, USER_ID)).limit(1);
   const targetCalories = goals?.targetCaloriesKcal ?? 1850;
   const targetProtein = goals?.targetProteinG ?? 180;
   const targetSteps = goals?.targetSteps ?? 10000;
@@ -27,12 +27,11 @@ export const GET: APIRoute = () => {
   const cutoff7Str = cutoff7.toISOString().slice(0, 10);
 
   // ── Daily logs ─────────────────────────────────────────────────────────────
-  const logs30 = db
+  const logs30 = await db
     .select()
     .from(dailyLogs)
     .where(and(eq(dailyLogs.userId, USER_ID), gte(dailyLogs.date, cutoff30Str)))
-    .orderBy(desc(dailyLogs.date))
-    .all();
+    .orderBy(desc(dailyLogs.date));
 
   const logs7 = logs30.filter((l) => l.date >= cutoff7Str);
 
@@ -75,17 +74,15 @@ export const GET: APIRoute = () => {
   const avgSteps7d = Math.round(avg(logs7.map((l) => l.steps)));
 
   // ── Workout counts ─────────────────────────────────────────────────────────
-  const workouts7 = db
+  const workouts7 = await db
     .select({ id: workouts.id })
     .from(workouts)
-    .where(and(eq(workouts.userId, USER_ID), gte(workouts.date, cutoff7Str)))
-    .all();
+    .where(and(eq(workouts.userId, USER_ID), gte(workouts.date, cutoff7Str)));
 
-  const workouts30 = db
+  const workouts30 = await db
     .select({ id: workouts.id })
     .from(workouts)
-    .where(and(eq(workouts.userId, USER_ID), gte(workouts.date, cutoff30Str)))
-    .all();
+    .where(and(eq(workouts.userId, USER_ID), gte(workouts.date, cutoff30Str)));
 
   const workoutsLast7d = workouts7.length;
   const workoutsLast30d = workouts30.length;

@@ -19,7 +19,34 @@ function isoWeekBounds(date: Date): { weekStart: string; weekEnd: string } {
   };
 }
 
-export const GET: APIRoute = () => {
+type SetRow = { exerciseName: string; weight: number; reps: number };
+
+async function getSetsForWorkouts(ids: number[]): Promise<SetRow[]> {
+  if (ids.length === 0) return [];
+  const results = await Promise.all(
+    ids.map((wid) =>
+      db
+        .select({
+          exerciseName: workoutSets.exerciseName,
+          weight: workoutSets.weight,
+          reps: workoutSets.reps,
+        })
+        .from(workoutSets)
+        .where(eq(workoutSets.workoutId, wid)),
+    ),
+  );
+  return results.flat();
+}
+
+function volumeByExercise(sets: SetRow[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const s of sets) {
+    map.set(s.exerciseName, (map.get(s.exerciseName) ?? 0) + s.weight * s.reps);
+  }
+  return map;
+}
+
+export const GET: APIRoute = async () => {
   const now = new Date();
   const { weekStart, weekEnd } = isoWeekBounds(now);
 
@@ -31,12 +58,12 @@ export const GET: APIRoute = () => {
   const prevWeekStart = prevMonday.toISOString().slice(0, 10);
   const prevWeekEnd = prevSunday.toISOString().slice(0, 10);
 
-  const goals = db.select().from(userGoals).where(eq(userGoals.userId, USER_ID)).get() ?? null;
+  const [goals = null] = await db.select().from(userGoals).where(eq(userGoals.userId, USER_ID)).limit(1);
   const targetCalories = goals?.targetCaloriesKcal ?? 1850;
   const targetProtein = goals?.targetProteinG ?? 180;
 
   // ── This week's daily logs ─────────────────────────────────────────────────
-  const thisWeekLogs = db
+  const thisWeekLogs = await db
     .select()
     .from(dailyLogs)
     .where(
@@ -46,8 +73,7 @@ export const GET: APIRoute = () => {
         lte(dailyLogs.date, weekEnd),
       ),
     )
-    .orderBy(desc(dailyLogs.date))
-    .all();
+    .orderBy(desc(dailyLogs.date));
 
   // ── Weight lost ────────────────────────────────────────────────────────────
   const weightLogsThisWeek = thisWeekLogs.filter((l) => l.weightKg != null);
@@ -58,7 +84,7 @@ export const GET: APIRoute = () => {
     weightLostKg = parseFloat((earliest - latest).toFixed(2));
   } else if (weightLogsThisWeek.length === 1) {
     // Try previous week for start weight
-    const prevWeekWeightLog = db
+    const prevWeekWeightLogs = await db
       .select()
       .from(dailyLogs)
       .where(
@@ -68,16 +94,15 @@ export const GET: APIRoute = () => {
           lte(dailyLogs.date, prevWeekEnd),
         ),
       )
-      .orderBy(desc(dailyLogs.date))
-      .all()
-      .find((l) => l.weightKg != null);
+      .orderBy(desc(dailyLogs.date));
+    const prevWeekWeightLog = prevWeekWeightLogs.find((l) => l.weightKg != null);
     if (prevWeekWeightLog) {
       weightLostKg = parseFloat((prevWeekWeightLog.weightKg! - weightLogsThisWeek[0].weightKg!).toFixed(2));
     }
   }
 
   // ── Workout count + days trained ───────────────────────────────────────────
-  const thisWeekWorkouts = db
+  const thisWeekWorkouts = await db
     .select()
     .from(workouts)
     .where(
@@ -86,8 +111,7 @@ export const GET: APIRoute = () => {
         gte(workouts.date, weekStart),
         lte(workouts.date, weekEnd),
       ),
-    )
-    .all();
+    );
 
   const workoutCount = thisWeekWorkouts.length;
   const daysTrained = new Set(thisWeekWorkouts.map((w) => w.date)).size;
@@ -111,7 +135,7 @@ export const GET: APIRoute = () => {
 
   // ── Best exercise: highest volume delta vs last week ──────────────────────
   const thisWeekWorkoutIds = thisWeekWorkouts.map((w) => w.id);
-  const prevWeekWorkouts = db
+  const prevWeekWorkouts = await db
     .select()
     .from(workouts)
     .where(
@@ -120,37 +144,11 @@ export const GET: APIRoute = () => {
         gte(workouts.date, prevWeekStart),
         lte(workouts.date, prevWeekEnd),
       ),
-    )
-    .all();
+    );
   const prevWeekWorkoutIds = prevWeekWorkouts.map((w) => w.id);
 
-  type SetRow = { exerciseName: string; weight: number; reps: number };
-
-  function getSetsForWorkouts(ids: number[]): SetRow[] {
-    if (ids.length === 0) return [];
-    return ids.flatMap((wid) =>
-      db
-        .select({
-          exerciseName: workoutSets.exerciseName,
-          weight: workoutSets.weight,
-          reps: workoutSets.reps,
-        })
-        .from(workoutSets)
-        .where(eq(workoutSets.workoutId, wid))
-        .all(),
-    );
-  }
-
-  function volumeByExercise(sets: SetRow[]): Map<string, number> {
-    const map = new Map<string, number>();
-    for (const s of sets) {
-      map.set(s.exerciseName, (map.get(s.exerciseName) ?? 0) + s.weight * s.reps);
-    }
-    return map;
-  }
-
-  const thisWeekSets = getSetsForWorkouts(thisWeekWorkoutIds);
-  const prevWeekSets = getSetsForWorkouts(prevWeekWorkoutIds);
+  const thisWeekSets = await getSetsForWorkouts(thisWeekWorkoutIds);
+  const prevWeekSets = await getSetsForWorkouts(prevWeekWorkoutIds);
   const thisVol = volumeByExercise(thisWeekSets);
   const prevVol = volumeByExercise(prevWeekSets);
 

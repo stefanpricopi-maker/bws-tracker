@@ -7,19 +7,18 @@ import { eq, and, gte, desc } from 'drizzle-orm';
 const USER_ID = 1;
 
 // ── GET /api/logs?days=30 ──────────────────────────────────────────────────
-export const GET: APIRoute = ({ url }) => {
+export const GET: APIRoute = async ({ url }) => {
   const days = parseInt(url.searchParams.get('days') ?? '30', 10);
 
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
   const cutoffStr = cutoff.toISOString().slice(0, 10);
 
-  const rows = db
+  const rows = await db
     .select()
     .from(dailyLogs)
     .where(and(eq(dailyLogs.userId, USER_ID), gte(dailyLogs.date, cutoffStr)))
-    .orderBy(desc(dailyLogs.date))
-    .all();
+    .orderBy(desc(dailyLogs.date));
 
   return new Response(JSON.stringify(rows), {
     status: 200,
@@ -53,29 +52,27 @@ export const POST: APIRoute = async ({ request }) => {
   };
 
   // Manual upsert — check for existing row first
-  const existing = db
+  const [existing] = await db
     .select({ id: dailyLogs.id })
     .from(dailyLogs)
     .where(and(eq(dailyLogs.userId, USER_ID), eq(dailyLogs.date, date)))
-    .get();
+    .limit(1);
 
   if (existing) {
-    db.update(dailyLogs)
+    await db.update(dailyLogs)
       .set(patch)
-      .where(eq(dailyLogs.id, existing.id))
-      .run();
+      .where(eq(dailyLogs.id, existing.id));
   } else {
-    db.insert(dailyLogs)
-      .values({ userId: USER_ID, date, ...patch })
-      .run();
+    await db.insert(dailyLogs)
+      .values({ userId: USER_ID, date, ...patch });
   }
 
   // Return the updated row
-  const updated = db
+  const [updated] = await db
     .select()
     .from(dailyLogs)
     .where(and(eq(dailyLogs.userId, USER_ID), eq(dailyLogs.date, date)))
-    .get();
+    .limit(1);
 
   return new Response(JSON.stringify(updated), {
     status: 200,

@@ -12,10 +12,10 @@ interface Alert {
   message: string;
 }
 
-export const GET: APIRoute = () => {
+export const GET: APIRoute = async () => {
   const now = new Date();
 
-  const goals = db.select().from(userGoals).where(eq(userGoals.userId, USER_ID)).get() ?? null;
+  const [goals = null] = await db.select().from(userGoals).where(eq(userGoals.userId, USER_ID)).limit(1);
   const targetCalories = goals?.targetCaloriesKcal ?? 1850;
   const targetSteps = goals?.targetSteps ?? 10000;
 
@@ -24,19 +24,17 @@ export const GET: APIRoute = () => {
   cutoff7.setDate(cutoff7.getDate() - 7);
   const cutoff7Str = cutoff7.toISOString().slice(0, 10);
 
-  const logs7 = db
+  const logs7 = await db
     .select()
     .from(dailyLogs)
     .where(and(eq(dailyLogs.userId, USER_ID), gte(dailyLogs.date, cutoff7Str)))
-    .orderBy(desc(dailyLogs.date))
-    .all();
+    .orderBy(desc(dailyLogs.date));
 
-  const workouts7 = db
+  const workouts7 = await db
     .select()
     .from(workouts)
     .where(and(eq(workouts.userId, USER_ID), gte(workouts.date, cutoff7Str)))
-    .orderBy(desc(workouts.date))
-    .all();
+    .orderBy(desc(workouts.date));
 
   const alerts: Alert[] = [];
 
