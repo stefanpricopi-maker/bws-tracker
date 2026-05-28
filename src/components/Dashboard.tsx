@@ -10,6 +10,7 @@ import WeeklySummary        from './WeeklySummary';
 import ConsistencyHeatmap   from './ConsistencyHeatmap';
 import WeeklyCheckIn        from './WeeklyCheckIn';
 import PhotoVault           from './PhotoVault';
+import GoalForecaster       from './GoalForecaster';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ function DashboardTab() {
   return (
     <div className="flex flex-col gap-8">
       <AlertBanner />
+      <GoalForecaster />
       <ConsistencyHeatmap />
       <WeeklyCheckIn />
       <WeeklySummary />

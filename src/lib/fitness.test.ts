@@ -12,6 +12,7 @@ import {
   roundTo2_5,
   calcDeloadWeight,
   detectDeload,
+  calcForecast,
 } from './fitness';
 
 // ── clamp ─────────────────────────────────────────────────────────────────────
@@ -415,5 +416,62 @@ describe('detectDeload', () => {
       { maxWeight: 82, maxReps: 8 },
       { maxWeight: 85, maxReps: 8 },
     ])).toBe(false);
+  });
+});
+
+// ── calcForecast ──────────────────────────────────────────────────────────────
+
+describe('calcForecast', () => {
+  const today = new Date('2026-05-28T12:00:00Z');
+  const goalKg = 83.6;
+
+  function makeWeights(first: number, last: number, count = 14): (number | null)[] {
+    // Linear interpolation from first to last over 14 days
+    return Array.from({ length: count }, (_, i) =>
+      +(first + (last - first) * (i / (count - 1))).toFixed(1));
+  }
+
+  it('detects stagnant when no weight change', () => {
+    const weights = Array(14).fill(90);
+    const result = calcForecast({ weights, goalKg, today });
+    expect(result.isStagnant).toBe(true);
+    expect(result.weeklyRateKg).toBeCloseTo(0, 1);
+  });
+
+  it('detects stagnant when gaining weight', () => {
+    const weights = makeWeights(88, 90);
+    const result = calcForecast({ weights, goalKg, today });
+    expect(result.isStagnant).toBe(true);
+  });
+
+  it('projects a date when losing consistently', () => {
+    // Losing ~0.5 kg/week: 90 → 89 over 14 days
+    const weights = makeWeights(90, 89);
+    const result = calcForecast({ weights, goalKg, today });
+    expect(result.isStagnant).toBe(false);
+    expect(result.weeklyRateKg).toBeLessThan(-0.1);
+    expect(result.daysRemaining).toBeGreaterThan(0);
+    expect(result.projectedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('returns alreadyAtGoal when current avg <= goal', () => {
+    const weights = Array(14).fill(83.0);
+    const result = calcForecast({ weights, goalKg, today });
+    expect(result.alreadyAtGoal).toBe(true);
+    expect(result.isStagnant).toBe(false);
+  });
+
+  it('returns insufficientData when fewer than 4 non-null values', () => {
+    const weights = [90, null, null, null, null, null, null, null, null, null, null, null, null, null];
+    const result = calcForecast({ weights, goalKg, today });
+    expect(result.insufficientData).toBe(true);
+  });
+
+  it('ignores null slots in average calculation', () => {
+    // Mix of nulls and values, still enough data
+    const weights: (number | null)[] = [90, null, 90, null, 90, null, 89.5, 89.5, 89, null, 89, null, 89, null];
+    const result = calcForecast({ weights, goalKg, today });
+    expect(result.insufficientData).toBe(false);
+    expect(result.currentAvgKg).toBeLessThan(90);
   });
 });

@@ -199,6 +199,80 @@ export function calcEatBack(activeBurn: number, baseTarget: number): EatBackResu
   return { eatBack, adjustedTarget, isHigh };
 }
 
+// ── Goal Forecasting ──────────────────────────────────────────────────────────
+
+export interface ForecastInput {
+  /** Chronological (oldest first) weight readings, null = no log that day */
+  weights: (number | null)[];
+  goalKg:  number;
+  today:   Date;
+}
+
+export interface ForecastResult {
+  isStagnant:      boolean;
+  weeklyRateKg:    number;   // kg/week, negative = losing
+  currentAvgKg:    number;   // avg of last 7 days
+  daysRemaining:   number | null;
+  projectedDate:   string   | null;  // ISO YYYY-MM-DD
+  alreadyAtGoal:   boolean;
+  insufficientData: boolean;
+}
+
+/**
+ * Compares average weight of the FIRST half vs LAST half of a 14-day window
+ * to compute a noise-resistant rate of change.
+ *
+ * Returns is_stagnant when the user is losing < 0.1 kg/week or gaining.
+ */
+export function calcForecast(input: ForecastInput): ForecastResult {
+  const { weights, goalKg, today } = input;
+
+  const nonNull = weights.filter((w): w is number => w != null);
+  if (nonNull.length < 4) {
+    return { isStagnant: true, weeklyRateKg: 0, currentAvgKg: 0,
+             daysRemaining: null, projectedDate: null, alreadyAtGoal: false, insufficientData: true };
+  }
+
+  const mid = Math.floor(weights.length / 2);
+  const firstHalf = weights.slice(0, mid).filter((w): w is number => w != null);
+  const lastHalf  = weights.slice(mid).filter((w): w is number => w != null);
+
+  if (firstHalf.length === 0 || lastHalf.length === 0) {
+    return { isStagnant: true, weeklyRateKg: 0, currentAvgKg: 0,
+             daysRemaining: null, projectedDate: null, alreadyAtGoal: false, insufficientData: true };
+  }
+
+  const avgFirst = avg(firstHalf);
+  const avgLast  = avg(lastHalf);
+
+  // Daily rate (negative = losing)
+  const dailyRate  = (avgLast - avgFirst) / mid;
+  const weeklyRate = +(dailyRate * 7).toFixed(2);
+
+  const currentAvgKg = +avgLast.toFixed(1);
+  const alreadyAtGoal = currentAvgKg <= goalKg;
+
+  // Stagnant if losing less than 100g/week OR gaining
+  const isStagnant = weeklyRate >= -0.1;
+
+  if (alreadyAtGoal) {
+    return { isStagnant: false, weeklyRateKg: weeklyRate, currentAvgKg,
+             daysRemaining: 0, projectedDate: today.toISOString().slice(0, 10), alreadyAtGoal: true, insufficientData: false };
+  }
+
+  if (isStagnant) {
+    return { isStagnant: true, weeklyRateKg: weeklyRate, currentAvgKg,
+             daysRemaining: null, projectedDate: null, alreadyAtGoal: false, insufficientData: false };
+  }
+
+  const daysRemaining = Math.ceil((currentAvgKg - goalKg) / Math.abs(dailyRate));
+  const projectedMs   = today.getTime() + daysRemaining * 86_400_000;
+  const projectedDate = new Date(projectedMs).toISOString().slice(0, 10);
+
+  return { isStagnant: false, weeklyRateKg: weeklyRate, currentAvgKg,
+           daysRemaining, projectedDate, alreadyAtGoal: false, insufficientData: false };
+}
+
 // ── AI Coach Rule Selector ────────────────────────────────────────────────────
 
 export type CoachRule = 1 | 2 | 4;
