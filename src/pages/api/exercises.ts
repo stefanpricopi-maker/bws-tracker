@@ -76,6 +76,7 @@ export const POST: APIRoute = async ({ request }) => {
     const name         = body.name?.trim() ?? '';
     const targetMuscle = body.target_muscle?.trim() ?? '';
     const category     = body.category?.trim() ?? '';
+    const imageUrl     = (body as { image_url?: string }).image_url?.trim() || null;
 
     if (!name || !targetMuscle || !category) {
       return new Response(
@@ -94,7 +95,7 @@ export const POST: APIRoute = async ({ request }) => {
 
     const [inserted] = await db
       .insert(exercises)
-      .values({ name, targetMuscle, category, isCustom: true, isArchived: false })
+      .values({ name, targetMuscle, category, imageUrl, isCustom: true, isArchived: false })
       .returning();
 
     return new Response(JSON.stringify({ exercise: inserted }), {

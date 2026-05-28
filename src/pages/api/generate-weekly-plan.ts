@@ -13,14 +13,28 @@ Your job is to create a personalised weekly workout split for a home-gym athlete
 You will be given the user's full exercise library as a JSON array.
 You MUST only use exercise names that appear EXACTLY in the provided list — do not invent, rename, or paraphrase any exercise.
 Apply proper volume balance: Push days hit chest/shoulders/triceps, Pull days hit back/biceps/rear-delts, Leg days hit quads/hamstrings/calves.
+
+Volume rules (apply per exercise):
+- Primary compound (first exercise per day): 4 sets
+- Secondary compound: 3 sets
+- Isolation for large muscles (back, chest, quads, hamstrings): 3 sets
+- Isolation for small muscles (biceps, triceps, rear delts, calves, lateral delts): 2-3 sets
+- Total weekly sets per muscle group must stay between 10-20 (hypertrophy range).
+
 Return ONLY a valid JSON object with NO markdown, NO backticks, NO explanation. The schema:
 {
   "split_type": "3-day" | "5-day",
   "days": [
-    { "day_name": "string", "category": "Push" | "Pull" | "Legs" | "Upper" | "Rest", "exercises": ["exercise_name_1", "exercise_name_2"] }
+    {
+      "day_name": "string",
+      "category": "Push" | "Pull" | "Legs" | "Upper" | "Rest",
+      "exercises": [
+        { "name": "string", "sets": number }
+      ]
+    }
   ]
 }
-Each training day should have 5-7 exercises. Rest days must have an empty "exercises" array.`;
+Each training day must have 5-7 exercises. Rest days must have an empty "exercises" array.`;
 
 function buildUserPrompt(exerciseList: Array<{ name: string; category: string; targetMuscle: string }>): string {
   return `Here is the user's full exercise library:
@@ -98,18 +112,28 @@ export const GET: APIRoute = async () => {
       throw new Error(`Model returned non-JSON: ${raw.slice(0, 300)}`);
     }
 
-    // Validate that every exercise name in the plan exists in our DB pool
-    // (guard against hallucination even with json_object mode)
+    // Validate that every exercise name in the plan exists in our DB pool.
+    // Also enforce sets is a sane integer (2–5). Guards against hallucination.
     const validNames = new Set(rows.map((r) => r.name));
-    const typed = plan as { days?: Array<{ exercises?: string[] }> };
+    type PlanExercise = { name: string; sets: number };
+    type PlanDay = { day_name: string; category: string; exercises: PlanExercise[] };
+    const typed = plan as { split_type?: string; days?: PlanDay[] };
     if (typed?.days) {
       for (const day of typed.days) {
-        if (!day.exercises) continue;
-        day.exercises = day.exercises.filter((ex) => {
-          if (validNames.has(ex)) return true;
-          console.warn(`[generate-weekly-plan] Hallucinated exercise removed: "${ex}"`);
-          return false;
-        });
+        if (!Array.isArray(day.exercises)) { day.exercises = []; continue; }
+        day.exercises = day.exercises
+          .filter((ex) => {
+            if (typeof ex !== 'object' || ex === null) return false;
+            if (!validNames.has(ex.name)) {
+              console.warn(`[generate-weekly-plan] Hallucinated exercise removed: "${ex.name}"`);
+              return false;
+            }
+            return true;
+          })
+          .map((ex) => ({
+            name: ex.name,
+            sets: Math.min(5, Math.max(2, Math.round(Number(ex.sets) || 3))),
+          }));
       }
     }
 

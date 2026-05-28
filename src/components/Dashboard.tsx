@@ -12,6 +12,8 @@ import WeeklyCheckIn        from './WeeklyCheckIn';
 import PhotoVault           from './PhotoVault';
 import GoalForecaster       from './GoalForecaster';
 import ExerciseManager      from './ExerciseManager';
+import WorkoutPlayer        from './WorkoutPlayer';
+import type { PlannedExercise } from './WorkoutPlayer';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
@@ -52,7 +54,11 @@ function DashboardTab() {
 
 // ── Workout tab (sub-tabs: Log / Library) ─────────────────────────────────
 
-function WorkoutTab() {
+interface WorkoutTabProps {
+  onStartPlayer: (exercises: PlannedExercise[], dayType: string) => void;
+}
+
+function WorkoutTab({ onStartPlayer }: WorkoutTabProps) {
   const [sub, setSub] = useState<'log' | 'library'>('log');
   return (
     <div className="flex flex-col gap-4">
@@ -69,7 +75,7 @@ function WorkoutTab() {
           </button>
         ))}
       </div>
-      {sub === 'log'     && <WorkoutLogger />}
+      {sub === 'log'     && <WorkoutLogger onStartPlayer={onStartPlayer} />}
       {sub === 'library' && <ExerciseManager />}
     </div>
   );
@@ -84,9 +90,28 @@ const GOOGLE_AUTH_MESSAGES: Record<string, { text: string; color: string }> = {
   not_configured: { text: '⚙️ Google Fit is not configured on this server. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel environment variables.', color: 'bg-blue-900 border-blue-500 text-blue-200' },
 };
 
+interface PlayerState {
+  exercises: PlannedExercise[];
+  dayType:   string;
+}
+
 export default function Dashboard() {
-  const [active, setActive] = useState<Tab>('dashboard');
+  const [active, setActive]         = useState<Tab>('dashboard');
   const [googleAuthMsg, setGoogleAuthMsg] = useState<{ text: string; color: string } | null>(null);
+  const [player, setPlayer]         = useState<PlayerState | null>(null);
+
+  function startPlayer(exercises: PlannedExercise[], dayType: string) {
+    setPlayer({ exercises, dayType });
+  }
+
+  function closePlayer() {
+    setPlayer(null);
+  }
+
+  function completePlayer() {
+    setPlayer(null);
+    setActive('dashboard');
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -101,6 +126,16 @@ export default function Dashboard() {
 
   return (
     <>
+      {/* WorkoutPlayer full-screen overlay */}
+      {player && (
+        <WorkoutPlayer
+          exercises={player.exercises}
+          dayType={player.dayType}
+          onComplete={completePlayer}
+          onClose={closePlayer}
+        />
+      )}
+
       {/* Google Auth status banner */}
       {googleAuthMsg && (
         <div className={`mx-4 mt-3 flex items-start gap-2 rounded-xl border px-4 py-3 text-sm ${googleAuthMsg.color}`}>
@@ -138,7 +173,7 @@ export default function Dashboard() {
       {/* Page content */}
       <div className="flex-1 overflow-y-auto px-4 pt-6 pb-8">
         {active === 'dashboard' && <DashboardTab />}
-        {active === 'workout'   && <WorkoutTab />}
+        {active === 'workout'   && <WorkoutTab onStartPlayer={startPlayer} />}
         {active === 'diet'      && <DietTracker />}
         {active === 'photos'    && <PhotoVault />}
         {active === 'profile'   && <ProfileSettings />}

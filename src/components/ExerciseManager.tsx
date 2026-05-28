@@ -31,6 +31,7 @@ export default function ExerciseManager() {
   const [name, setName]               = useState('');
   const [targetMuscle, setTargetMuscle] = useState('');
   const [category, setCategory]       = useState<string>(CATEGORIES[0]);
+  const [imageUrl, setImageUrl]       = useState('');
 
   async function fetchExercises() {
     setLoading(true);
@@ -55,14 +56,14 @@ export default function ExerciseManager() {
       const res = await fetch('/api/exercises', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ name: name.trim(), target_muscle: targetMuscle.trim(), category }),
+        body:    JSON.stringify({ name: name.trim(), target_muscle: targetMuscle.trim(), category, image_url: imageUrl.trim() || undefined }),
       });
       const data = await res.json() as { exercise?: Exercise; error?: string };
-      if (!res.ok) {
+        if (!res.ok) {
         setError(data.error ?? 'Failed to add exercise.');
       } else {
         setSuccess(`"${data.exercise!.name}" added successfully.`);
-        setName(''); setTargetMuscle(''); setCategory(CATEGORIES[0]);
+        setName(''); setTargetMuscle(''); setCategory(CATEGORIES[0]); setImageUrl('');
         setFormOpen(false);
         await fetchExercises();
         setTimeout(() => setSuccess(null), 3000);
@@ -152,6 +153,25 @@ export default function ExerciseManager() {
             >
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-400">Form Guide Image / GIF URL <span className="text-gray-600">(optional)</span></label>
+            <input
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              placeholder="https://example.com/exercise.gif"
+              className="min-h-[44px] bg-gray-900 border border-gray-700 rounded-xl px-3
+                         text-white text-sm placeholder-gray-600 focus:outline-none focus:border-violet-500"
+            />
+            {imageUrl && (
+              <img
+                src={imageUrl}
+                alt="preview"
+                className="mt-1 w-full max-h-32 object-contain rounded-xl bg-gray-900 border border-gray-700"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            )}
           </div>
 
           {error && (

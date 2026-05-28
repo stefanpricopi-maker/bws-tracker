@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { autoRegulate as autoRegulateCalc, calcDeloadWeight } from '../lib/fitness';
 import { getExerciseForBlock, EXERCISE_SWAP, MESOCYCLE_WEEKS } from '../lib/periodization';
+import type { PlannedExercise } from './WorkoutPlayer';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -226,7 +227,11 @@ interface MesocycleStatus {
   mesocycleComplete: boolean;
 }
 
-export default function WorkoutLogger() {
+interface WorkoutLoggerProps {
+  onStartPlayer?: (exercises: PlannedExercise[], dayType: string) => void;
+}
+
+export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}) {
   const [selectedDay, setSelectedDay] = useState(0);
   const [medMode, setMedMode] = useState(false);
   const [exercises, setExercises] = useState<ExerciseLog[]>(() =>
@@ -773,13 +778,27 @@ export default function WorkoutLogger() {
                           <p className="text-gray-400 text-xs">{d.category}</p>
                         </div>
                         {!isRest && (
-                          <button
-                            onClick={() => loadAiDay(d.exercises)}
-                            className="flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-xl
-                                       bg-violet-600 hover:bg-violet-500 text-white transition-colors"
-                          >
-                            Load Day
-                          </button>
+                          <div className="flex flex-col gap-1.5 items-end flex-shrink-0 ml-2">
+                            {onStartPlayer && (
+                              <button
+                                onClick={() => onStartPlayer(
+                                  d.exercises.map((e) => ({ name: e.name, sets: e.sets })),
+                                  d.category,
+                                )}
+                                className="text-xs font-bold px-3 py-1.5 rounded-xl
+                                           bg-green-600 hover:bg-green-500 text-white transition-colors whitespace-nowrap"
+                              >
+                                ▶ Start Player
+                              </button>
+                            )}
+                            <button
+                              onClick={() => loadAiDay(d.exercises.map((e) => e.name))}
+                              className="text-xs font-bold px-3 py-1.5 rounded-xl
+                                         bg-gray-700 hover:bg-gray-600 text-white transition-colors whitespace-nowrap"
+                            >
+                              Load to Logger
+                            </button>
+                          </div>
                         )}
                       </div>
                       {isRest ? (
@@ -787,8 +806,11 @@ export default function WorkoutLogger() {
                       ) : (
                         <ul className="flex flex-col gap-1">
                           {d.exercises.map((ex) => (
-                            <li key={ex} className="text-xs text-gray-300 flex items-start gap-1.5">
-                              <span className="text-gray-600 mt-0.5">·</span> {ex}
+                            <li key={ex.name} className="flex items-center justify-between text-xs text-gray-300">
+                              <span className="flex items-start gap-1.5">
+                                <span className="text-gray-600 mt-0.5">·</span> {ex.name}
+                              </span>
+                              <span className="text-gray-600 flex-shrink-0 ml-2">{ex.sets}×</span>
                             </li>
                           ))}
                         </ul>
