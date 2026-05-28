@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import WeightTrend          from './WeightTrend';
 import DietTracker          from './DietTracker';
 import StepTracker          from './StepTracker';
@@ -47,11 +47,42 @@ function DashboardTab() {
 
 // ── Main component ─────────────────────────────────────────────────────────
 
+const GOOGLE_AUTH_MESSAGES: Record<string, { text: string; color: string }> = {
+  success:        { text: '✅ Google Fit connected successfully!', color: 'bg-emerald-900 border-emerald-500 text-emerald-200' },
+  denied:         { text: '⚠️ Google Fit access was denied. Try connecting again.', color: 'bg-amber-900 border-amber-500 text-amber-200' },
+  error:          { text: '❌ Google Fit connection failed. Check the server logs.', color: 'bg-red-900 border-red-500 text-red-200' },
+  not_configured: { text: '⚙️ Google Fit is not configured on this server. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel environment variables.', color: 'bg-blue-900 border-blue-500 text-blue-200' },
+};
+
 export default function Dashboard() {
   const [active, setActive] = useState<Tab>('dashboard');
+  const [googleAuthMsg, setGoogleAuthMsg] = useState<{ text: string; color: string } | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('google_auth');
+    if (status && GOOGLE_AUTH_MESSAGES[status]) {
+      setGoogleAuthMsg(GOOGLE_AUTH_MESSAGES[status]);
+      // clean up URL without reload
+      const clean = window.location.pathname;
+      window.history.replaceState({}, '', clean);
+    }
+  }, []);
 
   return (
     <>
+      {/* Google Auth status banner */}
+      {googleAuthMsg && (
+        <div className={`mx-4 mt-3 flex items-start gap-2 rounded-xl border px-4 py-3 text-sm ${googleAuthMsg.color}`}>
+          <span className="flex-1">{googleAuthMsg.text}</span>
+          <button
+            type="button"
+            onClick={() => setGoogleAuthMsg(null)}
+            className="ml-2 text-current opacity-60 hover:opacity-100"
+          >✕</button>
+        </div>
+      )}
+
       {/* Top navigation bar */}
       <nav
         className="sticky top-0 z-50 w-full
