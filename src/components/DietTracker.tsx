@@ -1,5 +1,24 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
+// ── Macro-Solver types ──────────────────────────────────────────────────────
+interface MealIngredient {
+  item:      string;
+  amount_g:  number;
+  protein:   number;
+  carbs:     number;
+  fat:       number;
+  calories:  number;
+}
+interface Meal {
+  meal_name:      string;
+  ingredients:    MealIngredient[];
+  total_calories: number;
+}
+interface MealPlan {
+  meals:        Meal[];
+  daily_totals: { calories: number; protein: number; carbs: number; fat: number };
+}
+
 // ── Targets ────────────────────────────────────────────────────────────────
 const TARGETS = {
   calories: 1850,
@@ -155,8 +174,73 @@ export default function DietTracker() {
   const [scanStatus, setScanStatus] = useState<'idle' | 'ok' | 'err'>('idle');
   const [preview, setPreview]     = useState<string | null>(null);
   const [activeBurn, setActiveBurn] = useState<number | null>(null);
+  // Macro-Solver state
+  const [solving, setSolving]       = useState(false);
+  const [mealPlan, setMealPlan]     = useState<MealPlan | null>(null);
+  const [solveError, setSolveError] = useState<string | null>(null);
+  const [logging, setLogging]       = useState(false);
+  const [logStatus, setLogStatus]   = useState<'idle' | 'ok' | 'err'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handleActiveBurn = useCallback((kcal: number) => setActiveBurn(kcal), []);
+
+  async function handleSolveMacros() {
+    setSolving(true);
+    setSolveError(null);
+    setMealPlan(null);
+    setLogStatus('idle');
+    try {
+      const res  = await fetch('/api/macro-solver');
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Unknown error');
+      const plan = data.plan as MealPlan;
+      // Guard: validate shape
+      if (!plan?.meals || !Array.isArray(plan.meals)) throw new Error('Invalid meal plan structure');
+      setMealPlan(plan);
+    } catch (err) {
+      setSolveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSolving(false);
+    }
+  }
+
+  async function handleLogMealPlan() {
+    if (!mealPlan) return;
+    setLogging(true);
+    setLogStatus('idle');
+    try {
+      const t = mealPlan.daily_totals;
+      const res = await fetch('/api/logs', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          date:        new Date().toISOString().slice(0, 10),
+          calories_in: Math.round(t.calories),
+          protein_g:   Math.round(t.protein),
+          carbs_g:     Math.round(t.carbs),
+          fat_g:       Math.round(t.fat),
+        }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      const updated = await res.json();
+      setLogged({
+        calories: updated.caloriesIn ?? 0,
+        protein:  updated.proteinG   ?? 0,
+        carbs:    updated.carbsG     ?? 0,
+        fat:      updated.fatG       ?? 0,
+      });
+      setForm({
+        calories: String(Math.round(t.calories)),
+        protein:  String(Math.round(t.protein)),
+        carbs:    String(Math.round(t.carbs)),
+        fat:      String(Math.round(t.fat)),
+      });
+      setLogStatus('ok');
+    } catch {
+      setLogStatus('err');
+    } finally {
+      setLogging(false);
+    }
+  }
 
   // Load today's data on mount
   useEffect(() => {
@@ -272,9 +356,31 @@ export default function DietTracker() {
     <div className="flex flex-col gap-6">
 
       {/* Header */}
-      <div>
-        <h2 className="text-lg font-bold text-white">Nutrition</h2>
-        <p className="text-xs text-gray-500 mt-0.5">Daily targets & intake</p>
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-bold text-white">Nutrition</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Daily targets & intake</p>
+        </div>
+        <button
+          type="button"
+          onClick={handleSolveMacros}
+          disabled={solving}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold
+                     bg-emerald-600/20 border border-emerald-500/40 text-emerald-300
+                     hover:bg-emerald-600/30 active:bg-emerald-600/40
+                     disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+        >
+          {solving ? (
+            <>
+              <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10"/>
+              </svg>
+              Solving…
+            </>
+          ) : (
+            <>🧮 Solve Macros</>
+          )}
+        </button>
       </div>
 
       {/* Calorie ring-style hero */}
@@ -329,6 +435,94 @@ export default function DietTracker() {
         <MacroBar label="Carbs"   consumed={logged.carbs}   target={TARGETS.carbs}   unit="g" color="bg-amber-500" />
         <MacroBar label="Fat"     consumed={logged.fat}     target={TARGETS.fat}     unit="g" color="bg-rose-500" />
       </div>
+
+      {/* ── Macro-Solver error ─────────────────────────────────────── */}
+      {solveError && (
+        <div className="rounded-xl px-4 py-3 bg-red-900/40 border border-red-500/40">
+          <p className="text-xs font-semibold text-red-400">⚠ Macro solver error</p>
+          <p className="text-[11px] text-red-300/70 mt-0.5">{solveError}</p>
+        </div>
+      )}
+
+      {/* ── AI Meal Plan card ──────────────────────────────────────── */}
+      {mealPlan && (
+        <div
+          className="rounded-2xl flex flex-col gap-4 p-4"
+          style={{ backgroundColor: '#0f1a12', border: '1px solid #166534' }}
+        >
+          {/* Plan header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-bold text-emerald-300">🧮 AI Meal Plan</p>
+              <p className="text-[11px] text-emerald-400/60 mt-0.5">
+                {mealPlan.daily_totals.calories} kcal · {mealPlan.daily_totals.protein}g P ·{' '}
+                {mealPlan.daily_totals.carbs}g C · {mealPlan.daily_totals.fat}g F
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogMealPlan}
+              disabled={logging || logStatus === 'ok'}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-[11px] font-bold
+                         bg-emerald-600/30 border border-emerald-500/50 text-emerald-300
+                         hover:bg-emerald-600/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {logStatus === 'ok'
+                ? '✓ Logged'
+                : logging
+                ? 'Logging…'
+                : '📥 Log These Meals'}
+            </button>
+          </div>
+          {logStatus === 'err' && (
+            <p className="text-[11px] text-red-400">Failed to log. Try again.</p>
+          )}
+
+          {/* Meal cards */}
+          {mealPlan.meals.map((meal, mi) => (
+            <div
+              key={mi}
+              className="rounded-xl flex flex-col gap-2 p-3"
+              style={{ backgroundColor: '#0a1a0d', border: '1px solid #14532d' }}
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-emerald-200">{meal.meal_name}</p>
+                <span className="text-[11px] font-semibold text-emerald-400/70">
+                  {meal.total_calories} kcal
+                </span>
+              </div>
+
+              {/* Ingredient rows */}
+              <div className="flex flex-col gap-1">
+                {/* Column headers */}
+                <div className="grid text-[10px] text-gray-500 font-semibold uppercase tracking-wide"
+                     style={{ gridTemplateColumns: '1fr 44px 36px 36px 36px 44px' }}>
+                  <span>Ingredient</span>
+                  <span className="text-right">g</span>
+                  <span className="text-right">P</span>
+                  <span className="text-right">C</span>
+                  <span className="text-right">F</span>
+                  <span className="text-right">kcal</span>
+                </div>
+                {meal.ingredients.map((ing, ii) => (
+                  <div
+                    key={ii}
+                    className="grid items-center py-1 border-t border-gray-800/60 text-[11px]"
+                    style={{ gridTemplateColumns: '1fr 44px 36px 36px 36px 44px' }}
+                  >
+                    <span className="text-gray-200 truncate pr-1">{ing.item}</span>
+                    <span className="text-right font-bold text-white tabular-nums">{ing.amount_g}g</span>
+                    <span className="text-right text-blue-300 tabular-nums">{ing.protein}</span>
+                    <span className="text-right text-amber-300 tabular-nums">{ing.carbs}</span>
+                    <span className="text-right text-rose-300 tabular-nums">{ing.fat}</span>
+                    <span className="text-right text-gray-400 tabular-nums">{ing.calories}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Active burn banner (shown after wearable sync) */}
       {activeBurn !== null && (() => {
