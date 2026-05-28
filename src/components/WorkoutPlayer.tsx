@@ -484,8 +484,8 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
         </div>
       </div>
 
-      {/* SAVE SET — sticky bottom */}
-      <div className="flex-shrink-0 px-4 pb-6 pt-2 bg-gray-950 border-t border-gray-800">
+      {/* SAVE SET + Quit — sticky bottom */}
+      <div className="flex-shrink-0 px-4 pb-6 pt-2 bg-gray-950 border-t border-gray-800 flex flex-col gap-2">
         <button
           onClick={handleSaveSet}
           disabled={saving}
@@ -496,6 +496,13 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
                      transition-colors duration-150"
         >
           {saving ? '⏳ Saving...' : 'SAVE SET ▶'}
+        </button>
+        <button
+          onClick={onClose}
+          className="w-full min-h-[44px] bg-transparent border border-gray-700 hover:border-red-500/60
+                     hover:text-red-400 text-gray-500 font-semibold text-sm rounded-2xl transition-colors"
+        >
+          Quit Workout
         </button>
       </div>
     </div>
