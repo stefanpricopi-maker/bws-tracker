@@ -12,10 +12,12 @@
     "astro": "astro",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@astrojs/react": "^5.0.5",
+    "@astrojs/vercel": "^10.0.7",
     "@libsql/client": "^0.17.3",
     "@tailwindcss/vite": "^4.3.0",
     "@types/react": "^19.2.15",

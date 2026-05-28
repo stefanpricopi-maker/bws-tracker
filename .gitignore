@@ -27,3 +27,9 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+
+# Vercel
+.vercel/
+
+# MCP server build output
+mcp-server/dist/
