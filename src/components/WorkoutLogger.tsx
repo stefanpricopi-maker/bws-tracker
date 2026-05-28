@@ -367,12 +367,19 @@ export default function WorkoutLogger() {
       const end = new Date().toISOString().slice(0, 10);
       const start = new Date(Date.now() - 13 * 86_400_000).toISOString().slice(0, 10);
       const res = await fetch(`/api/google-fit-sessions?startDate=${start}&endDate=${end}`);
-      let data: unknown;
+      let data: { error?: string; message?: string } & unknown[] | Record<string, unknown> = [];
       try { data = await res.json(); } catch { throw new Error('Invalid server response'); }
-      if (!res.ok) throw new Error((data as { message?: string })?.message ?? 'Failed');
-      setFitSessions(data);
+      if (!res.ok) {
+        const d = data as { error?: string; message?: string };
+        if (d.error === 'not_connected' || d.error === 'token_expired') {
+          window.location.href = '/api/auth/google/login';
+          return;
+        }
+        throw new Error(d.message ?? 'Fetch failed');
+      }
+      setFitSessions(data as unknown[]);
     } catch (err) {
-      showToast('Could not fetch Google Fit sessions.');
+      showToast(err instanceof Error ? err.message : 'Could not fetch Google Fit sessions.');
       setShowSessions(false);
     } finally {
       setSyncingSessions(false);
