@@ -8,6 +8,7 @@ import ProfileSettings      from './ProfileSettings';
 import AlertBanner          from './AlertBanner';
 import WeeklySummary        from './WeeklySummary';
 import ConsistencyHeatmap   from './ConsistencyHeatmap';
+import WeeklyCheckIn        from './WeeklyCheckIn';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
@@ -33,6 +34,7 @@ function DashboardTab() {
     <div className="flex flex-col gap-8">
       <AlertBanner />
       <ConsistencyHeatmap />
+      <WeeklyCheckIn />
       <WeeklySummary />
       <BWSScore />
       <hr style={{ borderColor: '#2a2f45' }} />
