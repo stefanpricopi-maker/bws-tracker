@@ -28,7 +28,6 @@
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "astro": "^6.3.7",
-    "better-sqlite3": "^12.10.0",
     "drizzle-orm": "^0.45.2",
     "googleapis": "^172.0.0",
     "react": "^19.2.6",
@@ -36,6 +35,9 @@
     "react-is": "^19.2.6",
     "recharts": "^3.8.1",
     "tailwindcss": "^4.3.0"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.10.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
