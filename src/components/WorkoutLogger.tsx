@@ -174,11 +174,11 @@ function getBadge(exercise: ExerciseLog, sets: SetInput[]): Badge | null {
   return null;
 }
 
-const EMPTY_SETS = (): SetInput[] => [
-  { weight: '', reps: '', setLabel: '1' },
-  { weight: '', reps: '', setLabel: '2' },
-  { weight: '', reps: '', setLabel: '3' },
-];
+/** Creates `n` empty set rows (default 3). Labels are 1-based integers. */
+const MAKE_SETS = (n = 3): SetInput[] =>
+  Array.from({ length: n }, (_, i) => ({ weight: '', reps: '', setLabel: String(i + 1) }));
+
+const EMPTY_SETS = (): SetInput[] => MAKE_SETS(3);
 
 // Myo-Reps: 1 activation set to near-failure + 3 cluster mini-sets
 const MYO_SETS = (): SetInput[] => [
@@ -270,23 +270,23 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
     }
   }
 
-  async function loadAiDay(names: string[]) {
-    const trainingExercises = names.filter(Boolean);
-    if (!trainingExercises.length) return;
+  async function loadAiDay(planned: Array<{ name: string; sets: number }>) {
+    const items = planned.filter((p) => p.name);
+    if (!items.length) return;
     setLoadingPrev(true);
-    const fresh: ExerciseLog[] = trainingExercises.map((n) => ({
-      name: n,
-      sets: EMPTY_SETS(),
+    // Build initial logs using AI-recommended set counts
+    const fresh: ExerciseLog[] = items.map(({ name, sets }) => ({
+      name,
+      sets: MAKE_SETS(sets),
       lastWeight: null, lastReps: null, lastDate: null,
       targetWeight: null, targetReps: null,
       isWeightIncrease: false, needsDeload: false,
     }));
     setExercises(fresh);
     setPlannerOpen(false);
-    // Fetch previous stats for each exercise
     try {
       const results = await Promise.all(
-        trainingExercises.map((name) =>
+        items.map(({ name }) =>
           fetch(`/api/workouts?exercise_name=${encodeURIComponent(name)}`)
             .then((r) => r.json())
             .catch(() => ({ lastWeight: null, lastReps: null, lastDate: null, maxWeight: null, maxReps: null, needs_deload: false })),
@@ -305,10 +305,11 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
           } else {
             ({ targetWeight, targetReps, isWeightIncrease } = autoRegulate(r.maxWeight ?? null, r.maxReps ?? null));
           }
-          const preFilled = ex.sets.map((s) => ({
+          // Set 1: weight + reps pre-filled. Sets 2+: weight only (reps left empty to fill as lifted).
+          const preFilled = ex.sets.map((s, si) => ({
             ...s,
             weight: targetWeight !== null ? String(targetWeight) : s.weight,
-            reps:   targetReps   !== null ? String(targetReps)   : s.reps,
+            reps:   si === 0 && targetReps !== null ? String(targetReps) : '',
           }));
           return { ...ex, lastWeight: r.lastWeight ?? null, lastReps: r.lastReps ?? null, lastDate: r.lastDate ?? null, targetWeight, targetReps, isWeightIncrease, needsDeload, sets: preFilled };
         }),
@@ -354,11 +355,13 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
             ));
           }
 
-          // Pre-fill every set with the computed target
-          const preFilled = ex.sets.map((s) => ({
+          // Pre-fill: set 1 gets full target (weight + reps) as a starting hint.
+          // Sets 2+ get only the target weight pre-filled — reps stay empty so
+          // the user enters their real performance for each set independently.
+          const preFilled = ex.sets.map((s, si) => ({
             ...s,
             weight: targetWeight !== null ? String(targetWeight) : s.weight,
-            reps:   targetReps   !== null ? String(targetReps)   : s.reps,
+            reps:   si === 0 && targetReps !== null ? String(targetReps) : '',
           }));
 
           return {
@@ -792,7 +795,7 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                               </button>
                             )}
                             <button
-                              onClick={() => loadAiDay(d.exercises.map((e) => e.name))}
+                              onClick={() => loadAiDay(d.exercises)}
                               className="text-xs font-bold px-3 py-1.5 rounded-xl
                                          bg-gray-700 hover:bg-gray-600 text-white transition-colors whitespace-nowrap"
                             >
