@@ -1,43 +1,94 @@
-# Astro Starter Kit: Minimal
+# BWS Tracker
 
-```sh
-npm create astro@latest -- --template minimal
+Strict, math-based fitness tracker. Every number has a formula. Every target has a reason.
+
+Built with Astro SSR, React, Tailwind CSS, Drizzle ORM, Turso, and deployed on Vercel.
+
+## Features
+
+- **BWS Score** — composite 0–100 fitness score (weight pace, nutrition, protein, activity)
+- **Weight Trend** — 7-day rolling average chart (Recharts)
+- **Diet Tracker** — calorie ring, macro bars, active burn eat-back rule
+- **Step Tracker** — NEAT burn estimate, progress bar
+- **Workout Logger** — 7-day hybrid split, auto-regulation (Rule A/B progressive overload)
+- **Google Fit Sync** — steps, active calories, sleep, workout sessions via OAuth2
+- **Consistency Heatmap** — 30-day GitHub-style calendar with green streak
+- **AI Coach** — weekly LLM analysis via Groq (OpenAI-compatible)
+- **MCP Server** — exposes fitness data to Cursor AI via stdio
+- **PWA** — installable, offline shell, service worker
+
+## Stack
+
+| | |
+|---|---|
+| Framework | Astro 5 (SSR) |
+| UI | React 19 + Tailwind CSS v4 |
+| DB (local) | LibSQL `file:./bws.db` |
+| DB (production) | Turso (LibSQL cloud) |
+| ORM | Drizzle |
+| Deployment | Vercel |
+| Docker | Node 22 Alpine + docker-compose |
+
+## Local Development
+
+```bash
+npm install
+npm run dev          # http://localhost:4321
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+Requires a `.env` file — copy the structure from `.env.example` (or see `SPECS.md`).
 
-## 🚀 Project Structure
+## Docker
 
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
+```bash
+docker compose up --build
 ```
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+Uses `astro.config.docker.mjs` (Node standalone adapter) and a local SQLite file at `/data/bws.db`.
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
+## Database
 
-Any static assets, like images, can be placed in the `public/` directory.
+```bash
+npm run db:push       # Push schema to Turso (production)
+npm run db:generate   # Generate migration file from schema diff
+npm run db:migrate    # Apply pending migrations
+npm run db:studio     # Drizzle Studio GUI
+```
 
-## 🧞 Commands
+## Environment Variables
 
-All commands are run from the root of the project, from a terminal:
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | `file:./bws.db` locally, `libsql://...turso.io` in production |
+| `DATABASE_AUTH_TOKEN` | Turso auth token (not needed for local file) |
+| `GOOGLE_CLIENT_ID` | Google Cloud OAuth2 client ID |
+| `GOOGLE_CLIENT_SECRET` | Google Cloud OAuth2 client secret |
+| `GOOGLE_REDIRECT_URI` | OAuth2 callback URL |
+| `AI_API_KEY` | Groq / OpenAI API key |
+| `AI_API_BASE_URL` | API base URL (default: `https://api.groq.com/openai/v1`) |
+| `AI_MODEL` | Model name (default: `llama-3.1-8b-instant`) |
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+## MCP Server (Cursor Integration)
 
-## 👀 Want to learn more?
+```bash
+cd mcp-server && npm run build
+```
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+Add to `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "bws-tracker": {
+      "command": "node",
+      "args": ["/path/to/bws-tracker/mcp-server/dist/index.js"]
+    }
+  }
+}
+```
+
+Tools: `get_fitness_summary`, `get_exercise_history`, `get_weekly_summary`, `get_overload_report`.
+
+## Full Specs
+
+See [SPECS.md](./SPECS.md) for complete phase history, formulas, schema, and API docs.
