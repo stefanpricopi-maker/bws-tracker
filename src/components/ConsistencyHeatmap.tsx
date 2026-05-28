@@ -1,33 +1,6 @@
 import { useState, useEffect } from 'react';
-
-// ── Thresholds (must match the user's goals) ────────────────────────────────
-const CAL_MIN   = 1200;   // below this = under-eating (not ideal)
-const CAL_MAX   = 1850;   // above this = surplus (deficit broken)
-const STEP_MIN  = 10_000; // NEAT target
-
-// ── Day classification ──────────────────────────────────────────────────────
-
-type DayStatus = 'ideal' | 'active' | 'surplus' | 'empty';
-
-interface DayData {
-  date:       string;
-  calories:   number | null;
-  steps:      number | null;
-}
-
-function classify(d: DayData): DayStatus {
-  const hasCalories = d.calories !== null && d.calories > 0;
-  const hasSteps    = d.steps    !== null;
-
-  const inDeficit = hasCalories && d.calories! >= CAL_MIN && d.calories! <= CAL_MAX;
-  const hitSteps  = hasSteps && d.steps! >= STEP_MIN;
-  const surplus   = hasCalories && d.calories! > CAL_MAX;
-
-  if (inDeficit && hitSteps) return 'ideal';
-  if (hitSteps)              return 'active';
-  if (surplus)               return 'surplus';
-  return 'empty';
-}
+import { classifyDay as classify, calcStreak, CAL_MIN, CAL_MAX, STEP_MIN } from '../lib/fitness';
+import type { DayStatus, DayData } from '../lib/fitness';
 
 const STATUS_STYLE: Record<DayStatus, { bg: string; label: string }> = {
   ideal:   { bg: 'bg-emerald-500',          label: 'Ideal'   },
@@ -44,19 +17,6 @@ function buildDateRange(days: number): string[] {
     d.setDate(d.getDate() - (days - 1 - i));
     return d.toISOString().slice(0, 10);
   });
-}
-
-function calcStreak(days: { date: string; status: DayStatus }[]): number {
-  let streak = 0;
-  for (let i = days.length - 1; i >= 0; i--) {
-    const s = days[i].status;
-    if (s === 'ideal' || s === 'active') {
-      streak++;
-    } else {
-      break;
-    }
-  }
-  return streak;
 }
 
 function shortDay(dateStr: string): string {

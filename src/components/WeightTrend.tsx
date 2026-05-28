@@ -8,29 +8,8 @@ import {
   CartesianGrid,
   Tooltip,
 } from 'recharts';
-
-// ── Types ──────────────────────────────────────────────────────────────────
-
-interface DayEntry {
-  date:   string;
-  weight: number;
-}
-
-interface ChartPoint {
-  date: string;
-  avg:  number | null;
-}
-
-// ── Rolling average ────────────────────────────────────────────────────────
-
-function rollingAverage(entries: DayEntry[], window = 7): ChartPoint[] {
-  return entries.map((entry, i) => {
-    if (i < window - 1) return { date: entry.date, avg: null };
-    const slice = entries.slice(i - window + 1, i + 1);
-    const avg   = slice.reduce((s, e) => s + e.weight, 0) / window;
-    return { date: entry.date, avg: Math.round(avg * 100) / 100 };
-  });
-}
+import { rollingAverage } from '../lib/fitness';
+import type { DayEntry, ChartPoint } from '../lib/fitness';
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr + 'T00:00:00');

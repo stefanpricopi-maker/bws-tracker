@@ -2,12 +2,9 @@ import type { APIRoute } from 'astro';
 import { db } from '../../db';
 import { dailyLogs, workouts, userGoals } from '../../db/schema';
 import { eq, and, gte, desc } from 'drizzle-orm';
+import { clamp, avg, calcBWSScore } from '../../lib/fitness';
 
 const USER_ID = 1;
-
-function clamp(val: number, min: number, max: number) {
-  return Math.min(Math.max(val, min), max);
-}
 
 export const GET: APIRoute = async () => {
   const now = new Date();
@@ -63,12 +60,6 @@ export const GET: APIRoute = async () => {
       : null;
 
   // ── 7-day averages ─────────────────────────────────────────────────────────
-  function avg(vals: (number | null)[]): number {
-    const nonNull = vals.filter((v): v is number => v != null);
-    if (nonNull.length === 0) return 0;
-    return nonNull.reduce((a, b) => a + b, 0) / nonNull.length;
-  }
-
   const avgCalories7d = Math.round(avg(logs7.map((l) => l.caloriesIn)));
   const avgProtein7d = Math.round(avg(logs7.map((l) => l.proteinG)));
   const avgSteps7d = Math.round(avg(logs7.map((l) => l.steps)));
@@ -106,16 +97,16 @@ export const GET: APIRoute = async () => {
   }
 
   // ── BWS Score ──────────────────────────────────────────────────────────────
-  const weightProgress = Math.round(
-    clamp(1 - Math.abs(weightDelta7d ?? 0) / 0.5, 0, 1) * 25,
-  );
-  const nutritionScore = Math.round(clamp(avgCalories7d / targetCalories, 0, 1) * 25);
-  const proteinScore = Math.round(clamp(avgProtein7d / targetProtein, 0, 1) * 25);
-  const activityScore = Math.round(
-    clamp(avgSteps7d / targetSteps, 0, 1) * 12.5 + clamp(workoutsLast7d / 4, 0, 1) * 12.5,
-  );
-
-  const bwsScore = Math.round(weightProgress + nutritionScore + proteinScore + activityScore);
+  const { weightProgress, nutritionScore, proteinScore, activityScore, bwsScore } = calcBWSScore({
+    weightDelta7d,
+    avgCalories7d,
+    avgProtein7d,
+    avgSteps7d,
+    workoutsLast7d,
+    targetCalories,
+    targetProtein,
+    targetSteps,
+  });
 
   const payload = {
     currentWeight,

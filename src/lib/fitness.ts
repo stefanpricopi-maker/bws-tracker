@@ -1,0 +1,180 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Pure math functions — no DB, no framework dependencies.
+// Used by API routes and React components; tested independently via Vitest.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Primitives ────────────────────────────────────────────────────────────────
+
+export function clamp(val: number, min: number, max: number): number {
+  return Math.min(Math.max(val, min), max);
+}
+
+export function avg(vals: (number | null)[]): number {
+  const nonNull = vals.filter((v): v is number => v != null);
+  if (nonNull.length === 0) return 0;
+  return nonNull.reduce((a, b) => a + b, 0) / nonNull.length;
+}
+
+// ── BWS Score ─────────────────────────────────────────────────────────────────
+
+export interface BWSInputs {
+  weightDelta7d:   number | null;  // kg lost this week (negative = gain)
+  avgCalories7d:   number;
+  avgProtein7d:    number;
+  avgSteps7d:      number;
+  workoutsLast7d:  number;
+  targetCalories:  number;
+  targetProtein:   number;
+  targetSteps:     number;
+}
+
+export interface BWSBreakdown {
+  weightProgress: number;
+  nutritionScore: number;
+  proteinScore:   number;
+  activityScore:  number;
+  bwsScore:       number;
+}
+
+export function calcBWSScore(inputs: BWSInputs): BWSBreakdown {
+  const weightProgress = Math.round(
+    clamp(1 - Math.abs(inputs.weightDelta7d ?? 0) / 0.5, 0, 1) * 25,
+  );
+  const nutritionScore = Math.round(
+    clamp(inputs.avgCalories7d / inputs.targetCalories, 0, 1) * 25,
+  );
+  const proteinScore = Math.round(
+    clamp(inputs.avgProtein7d / inputs.targetProtein, 0, 1) * 25,
+  );
+  const activityScore = Math.round(
+    clamp(inputs.avgSteps7d / inputs.targetSteps, 0, 1) * 12.5 +
+    clamp(inputs.workoutsLast7d / 4, 0, 1) * 12.5,
+  );
+  const bwsScore = Math.round(weightProgress + nutritionScore + proteinScore + activityScore);
+  return { weightProgress, nutritionScore, proteinScore, activityScore, bwsScore };
+}
+
+// ── Auto-regulation (Progressive Overload) ────────────────────────────────────
+
+export interface AutoRegulateResult {
+  targetWeight:    number | null;
+  targetReps:      number | null;
+  isWeightIncrease: boolean;
+}
+
+export function autoRegulate(
+  maxWeight: number | null,
+  maxReps:   number | null,
+): AutoRegulateResult {
+  if (maxWeight === null || maxReps === null) {
+    return { targetWeight: null, targetReps: null, isWeightIncrease: false };
+  }
+  if (maxReps >= 10) {
+    // Rule A: hit upper hypertrophy bound → progress weight
+    return {
+      targetWeight:     Math.round((maxWeight + 2.5) * 100) / 100,
+      targetReps:       8,
+      isWeightIncrease: true,
+    };
+  }
+  // Rule B: accumulate reps at same weight
+  return {
+    targetWeight:     maxWeight,
+    targetReps:       maxReps + 1,
+    isWeightIncrease: false,
+  };
+}
+
+// ── Rolling Average ───────────────────────────────────────────────────────────
+
+export interface DayEntry {
+  date:   string;
+  weight: number;
+}
+
+export interface ChartPoint {
+  date: string;
+  avg:  number | null;
+}
+
+export function rollingAverage(entries: DayEntry[], window = 7): ChartPoint[] {
+  return entries.map((entry, i) => {
+    if (i < window - 1) return { date: entry.date, avg: null };
+    const slice = entries.slice(i - window + 1, i + 1);
+    const mean  = slice.reduce((s, e) => s + e.weight, 0) / window;
+    return { date: entry.date, avg: Math.round(mean * 100) / 100 };
+  });
+}
+
+// ── Consistency Heatmap ───────────────────────────────────────────────────────
+
+export const CAL_MIN  = 1200;
+export const CAL_MAX  = 1850;
+export const STEP_MIN = 10_000;
+
+export type DayStatus = 'ideal' | 'active' | 'surplus' | 'empty';
+
+export interface DayData {
+  date:     string;
+  calories: number | null;
+  steps:    number | null;
+}
+
+export function classifyDay(d: DayData): DayStatus {
+  const hasCalories = d.calories !== null && d.calories > 0;
+  const hasSteps    = d.steps    !== null;
+
+  const inDeficit = hasCalories && d.calories! >= CAL_MIN && d.calories! <= CAL_MAX;
+  const hitSteps  = hasSteps && d.steps! >= STEP_MIN;
+  const surplus   = hasCalories && d.calories! > CAL_MAX;
+
+  if (inDeficit && hitSteps) return 'ideal';
+  if (hitSteps)              return 'active';
+  if (surplus)               return 'surplus';
+  return 'empty';
+}
+
+export function calcStreak(days: { status: DayStatus }[]): number {
+  let streak = 0;
+  for (let i = days.length - 1; i >= 0; i--) {
+    const s = days[i].status;
+    if (s === 'ideal' || s === 'active') streak++;
+    else break;
+  }
+  return streak;
+}
+
+// ── Active Burn Eat-Back ──────────────────────────────────────────────────────
+
+export interface EatBackResult {
+  eatBack:        number;   // kcal to add above base target
+  adjustedTarget: number;   // base + eatBack
+  isHigh:         boolean;  // burn >= 600 kcal → show nuanced message
+}
+
+export function calcEatBack(activeBurn: number, baseTarget: number): EatBackResult {
+  const eatBack        = Math.min(Math.round(activeBurn * 0.5), 500);
+  const adjustedTarget = baseTarget + eatBack;
+  const isHigh         = activeBurn >= 600;
+  return { eatBack, adjustedTarget, isHigh };
+}
+
+// ── AI Coach Rule Selector ────────────────────────────────────────────────────
+
+export type CoachRule = 1 | 2 | 4;
+
+export interface CoachInputs {
+  weightDelta7d:   number | null;  // kg (negative = gained)
+  avgSteps7d:      number;
+  daysWithCalories: number;        // out of 7
+}
+
+export function selectCoachRule(inputs: CoachInputs): CoachRule {
+  if (inputs.daysWithCalories < 3) return 4;
+  if (inputs.weightDelta7d !== null) {
+    const loss = -inputs.weightDelta7d; // positive = lost weight
+    if (loss >= 0.5 && loss <= 0.8) return 1;
+    if (loss < 0.2 && inputs.avgSteps7d < 10_000) return 2;
+  }
+  return 1;
+}

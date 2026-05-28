@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { autoRegulate as autoRegulateCalc } from '../lib/fitness';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -181,18 +182,7 @@ const MYO_SETS = (): SetInput[] => [
  * Rule A: maxReps >= 10 → add 2.5 kg, target reps = 8  (weight increase)
  * Rule B: maxReps <  10 → same weight, target reps = maxReps + 1  (rep increase)
  */
-function autoRegulate(
-  maxWeight: number | null,
-  maxReps: number | null,
-): { targetWeight: number | null; targetReps: number | null; isWeightIncrease: boolean } {
-  if (maxWeight === null || maxReps === null) {
-    return { targetWeight: null, targetReps: null, isWeightIncrease: false };
-  }
-  if (maxReps >= 10) {
-    return { targetWeight: Math.round((maxWeight + 2.5) * 100) / 100, targetReps: 8, isWeightIncrease: true };
-  }
-  return { targetWeight: maxWeight, targetReps: maxReps + 1, isWeightIncrease: false };
-}
+const autoRegulate = autoRegulateCalc;
 
 function buildExerciseLogs(day: DayConfig, medMode = false): ExerciseLog[] {
   const list = medMode && day.medExercise

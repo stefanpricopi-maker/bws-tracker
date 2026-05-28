@@ -31,5 +31,16 @@ pnpm-debug.log*
 # Vercel
 .vercel/
 
+# Playwright
+playwright-report/
+test-results/
+
 # MCP server build output
 mcp-server/dist/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
