@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import WeightTrend      from './WeightTrend';
-import DietTracker      from './DietTracker';
-import StepTracker      from './StepTracker';
-import WorkoutLogger    from './WorkoutLogger';
-import BWSScore         from './BWSScore';
-import ProfileSettings  from './ProfileSettings';
-import AlertBanner      from './AlertBanner';
-import WeeklySummary    from './WeeklySummary';
+import WeightTrend          from './WeightTrend';
+import DietTracker          from './DietTracker';
+import StepTracker          from './StepTracker';
+import WorkoutLogger        from './WorkoutLogger';
+import BWSScore             from './BWSScore';
+import ProfileSettings      from './ProfileSettings';
+import AlertBanner          from './AlertBanner';
+import WeeklySummary        from './WeeklySummary';
+import ConsistencyHeatmap   from './ConsistencyHeatmap';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ function DashboardTab() {
   return (
     <div className="flex flex-col gap-8">
       <AlertBanner />
+      <ConsistencyHeatmap />
       <WeeklySummary />
       <BWSScore />
       <hr style={{ borderColor: '#2a2f45' }} />
