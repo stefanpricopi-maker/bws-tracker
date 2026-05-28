@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { autoRegulate as autoRegulateCalc, calcDeloadWeight } from '../lib/fitness';
+import { getExerciseForBlock, EXERCISE_SWAP, MESOCYCLE_WEEKS } from '../lib/periodization';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -187,11 +188,15 @@ const MYO_SETS = (): SetInput[] => [
 const autoRegulate = autoRegulateCalc;
 
 function buildExerciseLogs(day: DayConfig, medMode = false): ExerciseLog[] {
+  return buildExerciseLogsForBlock(day, medMode, 1);
+}
+
+function buildExerciseLogsForBlock(day: DayConfig, medMode = false, block = 1): ExerciseLog[] {
   const list = medMode && day.medExercise
     ? [day.medExercise]
     : day.exercises;
-  return list.map((name) => ({
-    name,
+  return list.map((originalName) => ({
+    name: getExerciseForBlock(originalName, block),
     sets: medMode ? MYO_SETS() : EMPTY_SETS(),
     lastWeight: null,
     lastReps: null,
@@ -205,6 +210,14 @@ function buildExerciseLogs(day: DayConfig, medMode = false): ExerciseLog[] {
 
 // ── Component ──────────────────────────────────────────────────────────────
 
+interface MesocycleStatus {
+  currentBlock:      number;
+  blockStartDate:    string;
+  weeksElapsed:      number;
+  weeksRemaining:    number;
+  mesocycleComplete: boolean;
+}
+
 export default function WorkoutLogger() {
   const [selectedDay, setSelectedDay] = useState(0);
   const [medMode, setMedMode] = useState(false);
@@ -217,6 +230,8 @@ export default function WorkoutLogger() {
   const [fitSessions, setFitSessions] = useState<FitSession[] | null>(null);
   const [syncingSessions, setSyncingSessions] = useState(false);
   const [showSessions, setShowSessions] = useState(false);
+  const [meso, setMeso] = useState<MesocycleStatus | null>(null);
+  const [advancingBlock, setAdvancingBlock] = useState(false);
 
   const fetchPrevStats = useCallback(async (day: DayConfig, isMed: boolean) => {
     if (day.isRest) return;
@@ -280,12 +295,21 @@ export default function WorkoutLogger() {
   }, []);
 
   // Rebuild exercise list when day or MED mode changes
+  // Fetch mesocycle status once on mount
+  useEffect(() => {
+    fetch('/api/mesocycle')
+      .then(r => r.json())
+      .then(d => setMeso(d as MesocycleStatus))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     const day = SPLIT[selectedDay];
-    const fresh = buildExerciseLogs(day, medMode);
+    const block = meso?.currentBlock ?? 1;
+    const fresh = buildExerciseLogsForBlock(day, medMode, block);
     setExercises(fresh);
     fetchPrevStats(day, medMode);
-  }, [selectedDay, medMode, fetchPrevStats]);
+  }, [selectedDay, medMode, fetchPrevStats, meso?.currentBlock]);
 
   function handleSetChange(
     exIdx: number,
@@ -386,10 +410,94 @@ export default function WorkoutLogger() {
     }
   }
 
+  async function handleAdvanceBlock() {
+    setAdvancingBlock(true);
+    try {
+      const res = await fetch('/api/mesocycle', { method: 'POST' });
+      const data = await res.json() as MesocycleStatus & { message?: string };
+      setMeso(prev => prev ? { ...prev, currentBlock: data.currentBlock,
+        blockStartDate: data.blockStartDate, weeksElapsed: 0,
+        weeksRemaining: MESOCYCLE_WEEKS, mesocycleComplete: false } : null);
+      showToast(`🔄 Block ${data.currentBlock} started! Exercises updated.`);
+    } catch {
+      showToast('Could not advance block. Try again.');
+    } finally {
+      setAdvancingBlock(false);
+    }
+  }
+
   const day = SPLIT[selectedDay];
 
   return (
     <div className="relative flex flex-col gap-4 pb-28">
+
+      {/* ── Mesocycle complete banner ──────────────────────────────────────── */}
+      {meso?.mesocycleComplete && (
+        <div className="rounded-2xl bg-violet-900/40 border border-violet-400/60 p-4">
+          <div className="flex items-start gap-3 mb-3">
+            <span className="text-2xl leading-none">🔄</span>
+            <div>
+              <p className="font-bold text-violet-200 text-base leading-tight">
+                8-Week Mesocycle Complete!
+              </p>
+              <p className="text-xs text-violet-300 mt-0.5">
+                Your muscles have adapted to the current movement patterns.
+                Switching exercises targets the same muscles via new motor paths —
+                breaking the plateau without deloading.
+              </p>
+            </div>
+          </div>
+          <div className="text-xs text-violet-400 mb-3 pl-9">
+            <p className="font-semibold mb-1">
+              Block {meso.currentBlock} → Block {meso.currentBlock === 1 ? 2 : 1} swaps:
+            </p>
+            <ul className="space-y-0.5">
+              {day.exercises.slice(0, 3).map(ex => {
+                const swap = EXERCISE_SWAP[ex];
+                if (!swap) return null;
+                return (
+                  <li key={ex} className="flex items-center gap-1.5">
+                    <span className="text-gray-400 line-through">{ex}</span>
+                    <span className="text-violet-300">→</span>
+                    <span className="text-white font-medium">{swap.block2}</span>
+                  </li>
+                );
+              })}
+              {day.exercises.length > 3 && (
+                <li className="text-gray-500">+ {day.exercises.length - 3} more…</li>
+              )}
+            </ul>
+          </div>
+          <button
+            type="button"
+            onClick={handleAdvanceBlock}
+            disabled={advancingBlock}
+            className="w-full rounded-xl bg-violet-600 hover:bg-violet-500 active:bg-violet-700
+                       text-white font-bold py-3 text-sm transition-colors
+                       disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {advancingBlock
+              ? 'Updating…'
+              : `✅ Initiate Block ${meso.currentBlock === 1 ? 2 : 1}`}
+          </button>
+        </div>
+      )}
+
+      {/* Mesocycle progress indicator (subtle) */}
+      {meso && !meso.mesocycleComplete && (
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-xs text-gray-500">
+            Block {meso.currentBlock} · Week {meso.weeksElapsed + 1}/{MESOCYCLE_WEEKS}
+          </span>
+          <div className="flex-1 h-1 rounded-full bg-gray-800 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-violet-600/60 transition-all"
+              style={{ width: `${((meso.weeksElapsed) / MESOCYCLE_WEEKS) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Day selector pills */}
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
         {SPLIT.map((_d, i) => (
@@ -545,6 +653,18 @@ export default function WorkoutLogger() {
 
               {/* Exercise header */}
               <div>
+                {/* Block 2 swap rationale */}
+                {meso && meso.currentBlock === 2 && (() => {
+                  // Find original Block 1 name by reverse-looking up the swap map
+                  const orig = Object.entries(EXERCISE_SWAP).find(([, v]) => v.block2 === ex.name);
+                  if (!orig) return null;
+                  return (
+                    <p className="text-[10px] text-violet-400/80 mb-1 leading-snug">
+                      🔄 Block 2 swap from <span className="line-through text-gray-500">{orig[0]}</span>
+                      {' '}· <span className="italic">{orig[1].rationale}</span>
+                    </p>
+                  );
+                })()}
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-semibold text-white text-sm">{ex.name}</h3>
                   {medMode && (

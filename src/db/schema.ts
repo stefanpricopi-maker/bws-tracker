@@ -84,3 +84,14 @@ export const googleTokens = sqliteTable('google_tokens', {
 
 export type GoogleTokens = typeof googleTokens.$inferSelect;
 export type NewGoogleTokens = typeof googleTokens.$inferInsert;
+
+export const mesocycles = sqliteTable('mesocycles', {
+  id:             integer('id').primaryKey({ autoIncrement: true }),
+  userId:         integer('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  currentBlock:   integer('current_block').notNull().default(1),
+  blockStartDate: text('block_start_date').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  updatedAt:      text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
+export type Mesocycle = typeof mesocycles.$inferSelect;
+export type NewMesocycle = typeof mesocycles.$inferInsert;
