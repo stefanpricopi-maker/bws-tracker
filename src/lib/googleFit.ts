@@ -64,8 +64,10 @@ export async function fetchDailyMetrics(
   const body = {
     aggregateBy: [
       {
-        // No dataSourceId → Google Fit merges ALL step sources (matches the app total)
+        // merge_step_deltas = only registered devices (Huawei Watch via Health Sync)
+        // NOT estimated_steps which adds Google's phone pedometer and double-counts
         dataTypeName: 'com.google.step_count.delta',
+        dataSourceId: 'derived:com.google.step_count.delta:com.google.android.gms:merge_step_deltas',
       },
       {
         dataTypeName: 'com.google.calories.expended',
