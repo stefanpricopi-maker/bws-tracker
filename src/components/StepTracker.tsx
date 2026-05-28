@@ -22,7 +22,12 @@ function SyncButton({ onSync }: SyncButtonProps) {
     setSynced(false);
     try {
       const res = await fetch(`/api/sync/google-fit?date=${today()}`);
-      const data = await res.json() as { steps?: number; error?: string; message?: string };
+      let data: { steps?: number; error?: string; message?: string } = {};
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error('Server returned an invalid response. Try again.');
+      }
       if (!res.ok) {
         if (data.error === 'not_connected' || data.error === 'token_expired') {
           window.location.href = '/api/auth/google/login';

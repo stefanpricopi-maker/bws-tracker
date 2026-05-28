@@ -20,8 +20,15 @@ export default function WeeklyCheckIn() {
     setErrMsg(null);
 
     try {
-      const res  = await fetch('/api/ai-coach');
-      const data = await res.json() as CoachResponse;
+      const res = await fetch('/api/ai-coach');
+      let data: CoachResponse = {} as CoachResponse;
+      try {
+        data = await res.json();
+      } catch {
+        setErrMsg('Server returned an invalid response. Try again.');
+        setStatus('error');
+        return;
+      }
 
       if (!res.ok || data.error) {
         if (res.status === 503) {
