@@ -9,6 +9,9 @@ import {
   calcStreak,
   calcEatBack,
   selectCoachRule,
+  roundTo2_5,
+  calcDeloadWeight,
+  detectDeload,
 } from './fitness';
 
 // ── clamp ─────────────────────────────────────────────────────────────────────
@@ -323,5 +326,94 @@ describe('selectCoachRule', () => {
 
   it('Rule 1 fallback: loss < 0.2 but steps are fine', () => {
     expect(selectCoachRule({ weightDelta7d: -0.1, avgSteps7d: 11_000, daysWithCalories: 5 })).toBe(1);
+  });
+});
+
+// ── roundTo2_5 ────────────────────────────────────────────────────────────────
+
+describe('roundTo2_5', () => {
+  it('rounds 80 → 80 (already on boundary)', () => expect(roundTo2_5(80)).toBe(80));
+  it('rounds 81 → 80 (below midpoint)', ()    => expect(roundTo2_5(81)).toBe(80));
+  it('rounds 81.3 → 82.5 (above midpoint)',   () => expect(roundTo2_5(81.3)).toBe(82.5));
+  it('rounds 83.75 → 85',                      () => expect(roundTo2_5(83.75)).toBe(85));
+  it('rounds 0 → 0',                           () => expect(roundTo2_5(0)).toBe(0));
+  it('handles decimal input correctly',        () => expect(roundTo2_5(77.5)).toBe(77.5));
+});
+
+// ── calcDeloadWeight ──────────────────────────────────────────────────────────
+
+describe('calcDeloadWeight', () => {
+  // 80 * 0.8 = 64 → roundTo2_5(64) = Math.round(25.6)*2.5 = 26*2.5 = 65
+  it('80 kg → 65 kg', () => expect(calcDeloadWeight(80)).toBe(65));
+  // 100 * 0.8 = 80 → already on 2.5 boundary
+  it('100 kg → 80 kg', () => expect(calcDeloadWeight(100)).toBe(80));
+  // 60 * 0.8 = 48 → Math.round(19.2)*2.5 = 19*2.5 = 47.5
+  it('60 kg → 47.5 kg', () => expect(calcDeloadWeight(60)).toBe(47.5));
+  // 120 * 0.8 = 96 → Math.round(38.4)*2.5 = 38*2.5 = 95
+  it('120 kg → 95 kg', () => expect(calcDeloadWeight(120)).toBe(95));
+  // 50 * 0.8 = 40 → already on 2.5 boundary
+  it('50 kg → 40 kg',  () => expect(calcDeloadWeight(50)).toBe(40));
+});
+
+// ── detectDeload ──────────────────────────────────────────────────────────────
+
+describe('detectDeload', () => {
+  it('returns false when fewer than 3 sessions', () => {
+    expect(detectDeload([])).toBe(false);
+    expect(detectDeload([{ maxWeight: 80, maxReps: 8 }])).toBe(false);
+    expect(detectDeload([{ maxWeight: 80, maxReps: 8 }, { maxWeight: 80, maxReps: 8 }])).toBe(false);
+  });
+
+  it('returns true when weight and reps are perfectly stagnant over 3 sessions', () => {
+    const s = { maxWeight: 80, maxReps: 8 };
+    expect(detectDeload([s, s, s])).toBe(true);
+  });
+
+  it('returns true when weight decreases monotonically', () => {
+    expect(detectDeload([
+      { maxWeight: 85, maxReps: 8 },
+      { maxWeight: 82, maxReps: 8 },
+      { maxWeight: 80, maxReps: 8 },
+    ])).toBe(true);
+  });
+
+  it('returns true when reps decrease monotonically at same weight', () => {
+    expect(detectDeload([
+      { maxWeight: 80, maxReps: 9 },
+      { maxWeight: 80, maxReps: 8 },
+      { maxWeight: 80, maxReps: 7 },
+    ])).toBe(true);
+  });
+
+  it('returns false when weight increases between any sessions', () => {
+    expect(detectDeload([
+      { maxWeight: 80, maxReps: 8 },
+      { maxWeight: 82, maxReps: 8 }, // increased
+      { maxWeight: 82, maxReps: 8 },
+    ])).toBe(false);
+  });
+
+  it('returns false when reps increase between any sessions', () => {
+    expect(detectDeload([
+      { maxWeight: 80, maxReps: 7 },
+      { maxWeight: 80, maxReps: 8 }, // reps increased
+      { maxWeight: 80, maxReps: 8 },
+    ])).toBe(false);
+  });
+
+  it('returns false when only weight stagnates but reps improve', () => {
+    expect(detectDeload([
+      { maxWeight: 80, maxReps: 7 },
+      { maxWeight: 80, maxReps: 8 },
+      { maxWeight: 80, maxReps: 9 },
+    ])).toBe(false);
+  });
+
+  it('returns false when only reps stagnate but weight improves', () => {
+    expect(detectDeload([
+      { maxWeight: 80, maxReps: 8 },
+      { maxWeight: 82, maxReps: 8 },
+      { maxWeight: 85, maxReps: 8 },
+    ])).toBe(false);
   });
 });

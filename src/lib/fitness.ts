@@ -54,6 +54,46 @@ export function calcBWSScore(inputs: BWSInputs): BWSBreakdown {
   return { weightProgress, nutritionScore, proteinScore, activityScore, bwsScore };
 }
 
+// ── CNS Deload Detection ──────────────────────────────────────────────────────
+
+export interface SessionBest {
+  maxWeight: number;
+  maxReps:   number;
+}
+
+/**
+ * Rounds a weight to the nearest 2.5 kg increment (standard barbell plate math).
+ * e.g. 81 → 80, 81.3 → 82.5, 0 → 0
+ */
+export function roundTo2_5(weight: number): number {
+  return Math.round(weight / 2.5) * 2.5;
+}
+
+/**
+ * Returns the deload weight: 80% of maxWeight, rounded to nearest 2.5 kg.
+ */
+export function calcDeloadWeight(maxWeight: number): number {
+  return roundTo2_5(maxWeight * 0.8);
+}
+
+/**
+ * Detects CNS fatigue / stagnation across the last 3 sessions (ordered oldest → newest).
+ *
+ * Triggers deload when BOTH weight AND reps never improved across consecutive sessions:
+ *   session[1].maxWeight <= session[0].maxWeight  (no progress in pair 0→1)
+ *   session[2].maxWeight <= session[1].maxWeight  (no progress in pair 1→2)
+ *   AND same for reps.
+ *
+ * Requires exactly 3 sessions to make a meaningful judgement.
+ */
+export function detectDeload(sessions: SessionBest[]): boolean {
+  if (sessions.length < 3) return false;
+  const [s0, s1, s2] = sessions; // oldest → newest
+  const weightStagnant = s1.maxWeight <= s0.maxWeight && s2.maxWeight <= s1.maxWeight;
+  const repsStagnant   = s1.maxReps   <= s0.maxReps   && s2.maxReps   <= s1.maxReps;
+  return weightStagnant && repsStagnant;
+}
+
 // ── Auto-regulation (Progressive Overload) ────────────────────────────────────
 
 export interface AutoRegulateResult {

@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { db } from '../../db';
 import { workouts, workoutSets } from '../../db/schema';
 import { eq, desc, and } from 'drizzle-orm';
+import { detectDeload } from '../../lib/fitness';
 
 const USER_ID = 1;
 
@@ -16,48 +17,58 @@ export const GET: APIRoute = async ({ url }) => {
     });
   }
 
-  // Find the most recent workout session that contains sets for this exercise
-  const [latestWorkout] = await db
-    .select({ workoutId: workoutSets.workoutId, date: workouts.date })
+  // Fetch the last 3 distinct workout sessions containing sets for this exercise
+  const recentSessions = await db
+    .selectDistinct({ workoutId: workoutSets.workoutId, date: workouts.date })
     .from(workoutSets)
     .innerJoin(workouts, eq(workoutSets.workoutId, workouts.id))
     .where(and(eq(workouts.userId, USER_ID), eq(workoutSets.exerciseName, exerciseName)))
     .orderBy(desc(workouts.date))
-    .limit(1);
+    .limit(3);
 
-  if (!latestWorkout) {
+  if (recentSessions.length === 0) {
     return new Response(
-      JSON.stringify({ lastWeight: null, lastReps: null, lastDate: null }),
+      JSON.stringify({ lastWeight: null, lastReps: null, lastDate: null, maxWeight: null, maxReps: null, needs_deload: false }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     );
   }
 
-  // Get all sets from that workout for the given exercise, then pick max weight
-  const sets = await db
-    .select()
-    .from(workoutSets)
-    .where(
-      and(
-        eq(workoutSets.workoutId, latestWorkout.workoutId),
-        eq(workoutSets.exerciseName, exerciseName),
-      ),
-    );
+  // For each session, find the best set (highest weight; ties broken by highest reps)
+  const sessionBests = await Promise.all(
+    recentSessions.map(async (session) => {
+      const sets = await db
+        .select()
+        .from(workoutSets)
+        .where(
+          and(
+            eq(workoutSets.workoutId, session.workoutId),
+            eq(workoutSets.exerciseName, exerciseName),
+          ),
+        );
+      const best = sets.reduce((acc, s) => {
+        if (s.weight > acc.weight) return s;
+        if (s.weight === acc.weight && s.reps > acc.reps) return s;
+        return acc;
+      }, sets[0]);
+      return { maxWeight: best.weight, maxReps: best.reps, date: session.date };
+    }),
+  );
 
-  // Best set = highest weight; on tie, highest reps
-  const best = sets.reduce((acc, s) => {
-    if (s.weight > acc.weight) return s;
-    if (s.weight === acc.weight && s.reps > acc.reps) return s;
-    return acc;
-  }, sets[0]);
+  // Most recent session is sessionBests[0] (DESC order)
+  const latest = sessionBests[0];
+
+  // detectDeload expects oldest → newest; reverse the DESC array
+  const oldestToNewest = [...sessionBests].reverse();
+  const needs_deload = detectDeload(oldestToNewest);
 
   return new Response(
     JSON.stringify({
-      lastWeight:  best.weight,
-      lastReps:    best.reps,
-      lastDate:    latestWorkout.date,
-      // Explicit aliases used by the auto-regulation engine (Phase 12)
-      maxWeight:   best.weight,
-      maxReps:     best.reps,
+      lastWeight:   latest.maxWeight,
+      lastReps:     latest.maxReps,
+      lastDate:     latest.date,
+      maxWeight:    latest.maxWeight,
+      maxReps:      latest.maxReps,
+      needs_deload,
     }),
     { status: 200, headers: { 'Content-Type': 'application/json' } },
   );

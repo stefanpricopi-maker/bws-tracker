@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { autoRegulate as autoRegulateCalc } from '../lib/fitness';
+import { autoRegulate as autoRegulateCalc, calcDeloadWeight } from '../lib/fitness';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -29,6 +29,8 @@ interface ExerciseLog {
   targetWeight: number | null;
   targetReps: number | null;
   isWeightIncrease: boolean; // true when Rule A applied (+2.5 kg)
+  // CNS deload flag (Phase 16)
+  needsDeload: boolean;
 }
 
 interface DayConfig {
@@ -197,6 +199,7 @@ function buildExerciseLogs(day: DayConfig, medMode = false): ExerciseLog[] {
     targetWeight: null,
     targetReps: null,
     isWeightIncrease: false,
+    needsDeload: false,
   }));
 }
 
@@ -226,18 +229,32 @@ export default function WorkoutLogger() {
         exerciseNames.map((name) =>
           fetch(`/api/workouts?exercise_name=${encodeURIComponent(name)}`)
             .then((r) => r.json())
-            .catch(() => ({ lastWeight: null, lastReps: null, lastDate: null, maxWeight: null, maxReps: null })),
+            .catch(() => ({ lastWeight: null, lastReps: null, lastDate: null, maxWeight: null, maxReps: null, needs_deload: false })),
         ),
       );
       setExercises((prev) =>
         prev.map((ex, i) => {
           const r = results[i] ?? {};
-          const { targetWeight, targetReps, isWeightIncrease } = autoRegulate(
-            r.maxWeight ?? null,
-            r.maxReps   ?? null,
-          );
+          const needsDeload = r.needs_deload === true;
 
-          // Pre-fill every set with the auto-regulated target
+          let targetWeight: number | null;
+          let targetReps:   number | null;
+          let isWeightIncrease = false;
+
+          if (needsDeload && r.maxWeight != null) {
+            // Phase 16: CNS fatigue — drop 20%, round to nearest 2.5 kg, target 10 reps
+            targetWeight     = calcDeloadWeight(r.maxWeight);
+            targetReps       = 10;
+            isWeightIncrease = false;
+          } else {
+            // Phase 12: normal auto-regulation (Rule A / Rule B)
+            ({ targetWeight, targetReps, isWeightIncrease } = autoRegulate(
+              r.maxWeight ?? null,
+              r.maxReps   ?? null,
+            ));
+          }
+
+          // Pre-fill every set with the computed target
           const preFilled = ex.sets.map((s) => ({
             ...s,
             weight: targetWeight !== null ? String(targetWeight) : s.weight,
@@ -252,6 +269,7 @@ export default function WorkoutLogger() {
             targetWeight,
             targetReps,
             isWeightIncrease,
+            needsDeload,
             sets: preFilled,
           };
         }),
@@ -502,6 +520,21 @@ export default function WorkoutLogger() {
             const badge = getBadge(ex, ex.sets);
             return (
             <div key={ex.name} className="bg-gray-800 rounded-2xl border border-gray-700 p-4 flex flex-col gap-3">
+
+              {/* Phase 16: CNS Fatigue / Deload Banner */}
+              {!loadingPrev && ex.needsDeload && (
+                <div className="rounded-xl px-4 py-3 flex flex-col gap-1 bg-amber-900/60 border border-amber-500/60">
+                  <p className="text-xs font-bold text-amber-300 leading-snug">
+                    ⚠️ CNS Fatigue Detected
+                  </p>
+                  <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                    Stagnation over 3 sessions. Auto-Deload initiated (−20% weight).
+                    Focus strictly on <span className="font-semibold text-amber-300">form</span> and{' '}
+                    <span className="font-semibold text-amber-300">explosive concentric movement</span> today.
+                  </p>
+                </div>
+              )}
+
               {/* Exercise header */}
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -511,8 +544,14 @@ export default function WorkoutLogger() {
                       M.E.D.
                     </span>
                   )}
-                  {/* Phase 12: weight-increase indicator */}
-                  {ex.isWeightIncrease && !medMode && (
+                  {/* Phase 16: deload badge (replaces Phase 12 weight-increase badge) */}
+                  {ex.needsDeload && !medMode && (
+                    <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                      🔻 Deload −20%
+                    </span>
+                  )}
+                  {/* Phase 12: weight-increase indicator (only when no deload) */}
+                  {ex.isWeightIncrease && !ex.needsDeload && !medMode && (
                     <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/30">
                       ⬆️ +2.5 kg
                     </span>
@@ -530,10 +569,10 @@ export default function WorkoutLogger() {
                     ? `Previous: ${ex.lastWeight} kg × ${ex.lastReps} reps${ex.lastDate ? ` (${ex.lastDate})` : ''}`
                     : 'No previous data'}
                 </p>
-                {/* Auto-regulation target hint */}
+                {/* Target hint: deload shows amber, normal auto-regulation shows violet */}
                 {!loadingPrev && ex.targetWeight !== null && ex.targetReps !== null && !medMode && (
-                  <p className="text-[11px] mt-0.5 font-medium text-violet-400">
-                    🎯 Target: {ex.targetWeight} kg × {ex.targetReps} reps
+                  <p className={`text-[11px] mt-0.5 font-medium ${ex.needsDeload ? 'text-amber-400' : 'text-violet-400'}`}>
+                    {ex.needsDeload ? '🔻' : '🎯'} Target: {ex.targetWeight} kg × {ex.targetReps} reps
                   </p>
                 )}
               </div>
