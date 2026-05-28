@@ -241,6 +241,78 @@ export default function WorkoutLogger() {
   const [meso, setMeso] = useState<MesocycleStatus | null>(null);
   const [advancingBlock, setAdvancingBlock] = useState(false);
 
+  // ── AI Weekly Planner state ────────────────────────────────────────────────
+  interface AiPlanDay { day_name: string; category: string; exercises: string[] }
+  interface AiPlan    { split_type: string; days: AiPlanDay[] }
+
+  const [plannerOpen, setPlannerOpen]     = useState(false);
+  const [aiPlan, setAiPlan]               = useState<AiPlan | null>(null);
+  const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [planError, setPlanError]         = useState<string | null>(null);
+
+  async function generatePlan() {
+    setGeneratingPlan(true);
+    setPlanError(null);
+    try {
+      const res  = await fetch('/api/generate-weekly-plan');
+      const data = await res.json() as { plan?: AiPlan; error?: string };
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Unknown error');
+      setAiPlan(data.plan ?? null);
+    } catch (err) {
+      setPlanError(String(err));
+    } finally {
+      setGeneratingPlan(false);
+    }
+  }
+
+  async function loadAiDay(names: string[]) {
+    const trainingExercises = names.filter(Boolean);
+    if (!trainingExercises.length) return;
+    setLoadingPrev(true);
+    const fresh: ExerciseLog[] = trainingExercises.map((n) => ({
+      name: n,
+      sets: EMPTY_SETS(),
+      lastWeight: null, lastReps: null, lastDate: null,
+      targetWeight: null, targetReps: null,
+      isWeightIncrease: false, needsDeload: false,
+    }));
+    setExercises(fresh);
+    setPlannerOpen(false);
+    // Fetch previous stats for each exercise
+    try {
+      const results = await Promise.all(
+        trainingExercises.map((name) =>
+          fetch(`/api/workouts?exercise_name=${encodeURIComponent(name)}`)
+            .then((r) => r.json())
+            .catch(() => ({ lastWeight: null, lastReps: null, lastDate: null, maxWeight: null, maxReps: null, needs_deload: false })),
+        ),
+      );
+      setExercises((prev) =>
+        prev.map((ex, i) => {
+          const r = results[i] ?? {};
+          const needsDeload = r.needs_deload === true;
+          let targetWeight: number | null = null;
+          let targetReps:   number | null = null;
+          let isWeightIncrease = false;
+          if (needsDeload && r.maxWeight != null) {
+            targetWeight = calcDeloadWeight(r.maxWeight);
+            targetReps   = 10;
+          } else {
+            ({ targetWeight, targetReps, isWeightIncrease } = autoRegulate(r.maxWeight ?? null, r.maxReps ?? null));
+          }
+          const preFilled = ex.sets.map((s) => ({
+            ...s,
+            weight: targetWeight !== null ? String(targetWeight) : s.weight,
+            reps:   targetReps   !== null ? String(targetReps)   : s.reps,
+          }));
+          return { ...ex, lastWeight: r.lastWeight ?? null, lastReps: r.lastReps ?? null, lastDate: r.lastDate ?? null, targetWeight, targetReps, isWeightIncrease, needsDeload, sets: preFilled };
+        }),
+      );
+    } finally {
+      setLoadingPrev(false);
+    }
+  }
+
   const fetchPrevStats = useCallback(async (day: DayConfig, isMed: boolean) => {
     if (day.isRest) return;
     setLoadingPrev(true);
@@ -627,6 +699,108 @@ export default function WorkoutLogger() {
           </p>
         </div>
       )}
+
+      {/* ── AI Weekly Planner ───────────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-gray-700 bg-gray-800/50 overflow-hidden">
+        {/* Toggle header */}
+        <button
+          onClick={() => setPlannerOpen((o) => !o)}
+          className="w-full flex items-center justify-between px-4 py-3 text-left"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-base leading-none">🤖</span>
+            <div>
+              <p className="text-sm font-semibold text-white">AI Weekly Routine</p>
+              <p className="text-[11px] text-gray-400">Generate a plan from your exercise library</p>
+            </div>
+          </div>
+          <span className="text-gray-500 text-xs">{plannerOpen ? '▲' : '▼'}</span>
+        </button>
+
+        {plannerOpen && (
+          <div className="border-t border-gray-700 p-4 flex flex-col gap-4">
+            {/* Generate button */}
+            {!aiPlan && (
+              <button
+                onClick={generatePlan}
+                disabled={generatingPlan}
+                className="min-h-[44px] w-full bg-violet-600 hover:bg-violet-500 active:bg-violet-700
+                           disabled:opacity-60 text-white font-semibold text-sm rounded-xl transition-colors"
+              >
+                {generatingPlan ? '⏳ Generating...' : '✨ Generate 5-Day Split'}
+              </button>
+            )}
+
+            {/* Error */}
+            {planError && (
+              <div className="rounded-xl px-4 py-3 bg-red-900/30 border border-red-500/30 text-red-300 text-xs">
+                ⚠️ {planError}
+              </div>
+            )}
+
+            {/* Plan cards */}
+            {aiPlan && (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                    {aiPlan.split_type ?? '5-day'} split
+                  </p>
+                  <button
+                    onClick={() => { setAiPlan(null); setPlanError(null); }}
+                    className="text-xs text-gray-500 hover:text-gray-300 underline"
+                  >
+                    Regenerate
+                  </button>
+                </div>
+
+                {aiPlan.days?.map((d, idx) => {
+                  const isRest = !d.exercises?.length || d.category === 'Rest';
+                  const catColor: Record<string, string> = {
+                    Push: 'border-orange-500/40 bg-orange-500/5',
+                    Pull: 'border-blue-500/40 bg-blue-500/5',
+                    Legs: 'border-green-500/40 bg-green-500/5',
+                    Upper:'border-violet-500/40 bg-violet-500/5',
+                    Rest: 'border-gray-700 bg-gray-800/30',
+                  };
+                  return (
+                    <div
+                      key={idx}
+                      className={`rounded-xl border p-3 flex flex-col gap-2 ${catColor[d.category] ?? 'border-gray-700 bg-gray-800/30'}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-white text-sm font-semibold">{d.day_name}</p>
+                          <p className="text-gray-400 text-xs">{d.category}</p>
+                        </div>
+                        {!isRest && (
+                          <button
+                            onClick={() => loadAiDay(d.exercises)}
+                            className="flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-xl
+                                       bg-violet-600 hover:bg-violet-500 text-white transition-colors"
+                          >
+                            Load Day
+                          </button>
+                        )}
+                      </div>
+                      {isRest ? (
+                        <p className="text-gray-500 text-xs italic">Rest & Recovery</p>
+                      ) : (
+                        <ul className="flex flex-col gap-1">
+                          {d.exercises.map((ex) => (
+                            <li key={ex} className="text-xs text-gray-300 flex items-start gap-1.5">
+                              <span className="text-gray-600 mt-0.5">·</span> {ex}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Rest day message */}
       {day.isRest ? (

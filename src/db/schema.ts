@@ -95,3 +95,16 @@ export const mesocycles = sqliteTable('mesocycles', {
 
 export type Mesocycle = typeof mesocycles.$inferSelect;
 export type NewMesocycle = typeof mesocycles.$inferInsert;
+
+export const exercises = sqliteTable('exercises', {
+  id:           integer('id').primaryKey({ autoIncrement: true }),
+  name:         text('name').notNull().unique(),
+  targetMuscle: text('target_muscle').notNull(),
+  category:     text('category').notNull(), // 'Push' | 'Pull' | 'Legs' | 'Upper' | 'Full Body'
+  isCustom:     integer('is_custom',   { mode: 'boolean' }).notNull().default(false),
+  isArchived:   integer('is_archived', { mode: 'boolean' }).notNull().default(false),
+  createdAt:    text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
+export type Exercise    = typeof exercises.$inferSelect;
+export type NewExercise = typeof exercises.$inferInsert;

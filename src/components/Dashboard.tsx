@@ -11,6 +11,7 @@ import ConsistencyHeatmap   from './ConsistencyHeatmap';
 import WeeklyCheckIn        from './WeeklyCheckIn';
 import PhotoVault           from './PhotoVault';
 import GoalForecaster       from './GoalForecaster';
+import ExerciseManager      from './ExerciseManager';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
@@ -45,6 +46,31 @@ function DashboardTab() {
       <WeightTrend />
       <hr style={{ borderColor: '#2a2f45' }} />
       <StepTracker />
+    </div>
+  );
+}
+
+// ── Workout tab (sub-tabs: Log / Library) ─────────────────────────────────
+
+function WorkoutTab() {
+  const [sub, setSub] = useState<'log' | 'library'>('log');
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Sub-tab toggle */}
+      <div className="flex rounded-xl bg-gray-800 border border-gray-700 p-1 gap-1">
+        {(['log', 'library'] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setSub(s)}
+            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors capitalize
+              ${sub === s ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+          >
+            {s === 'log' ? '🏋 Log Workout' : '📚 Exercise Library'}
+          </button>
+        ))}
+      </div>
+      {sub === 'log'     && <WorkoutLogger />}
+      {sub === 'library' && <ExerciseManager />}
     </div>
   );
 }
@@ -112,7 +138,7 @@ export default function Dashboard() {
       {/* Page content */}
       <div className="flex-1 overflow-y-auto px-4 pt-6 pb-8">
         {active === 'dashboard' && <DashboardTab />}
-        {active === 'workout'   && <WorkoutLogger />}
+        {active === 'workout'   && <WorkoutTab />}
         {active === 'diet'      && <DietTracker />}
         {active === 'photos'    && <PhotoVault />}
         {active === 'profile'   && <ProfileSettings />}
