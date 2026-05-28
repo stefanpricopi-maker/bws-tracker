@@ -219,9 +219,11 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
   // ── Render: Loading ───────────────────────────────────────────────────────
   if (phase === 'loading') {
     return (
-      <div className="fixed inset-0 z-50 bg-gray-950 flex flex-col items-center justify-center gap-4">
-        <div className="w-12 h-12 rounded-full border-4 border-violet-600 border-t-transparent animate-spin" />
-        <p className="text-gray-400 text-sm">Loading exercise data...</p>
+      <div className="fixed inset-0 z-50 flex justify-center bg-black/60">
+        <div className="w-full max-w-md bg-gray-950 flex flex-col items-center justify-center gap-4">
+          <div className="w-12 h-12 rounded-full border-4 border-violet-600 border-t-transparent animate-spin" />
+          <p className="text-gray-400 text-sm">Loading exercise data...</p>
+        </div>
       </div>
     );
   }
@@ -229,7 +231,8 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
   // ── Render: Complete ──────────────────────────────────────────────────────
   if (phase === 'complete') {
     return (
-      <div className="fixed inset-0 z-50 bg-gray-950 flex flex-col items-center justify-center gap-6 px-6 text-center">
+      <div className="fixed inset-0 z-50 flex justify-center bg-black/60">
+      <div className="w-full max-w-md bg-gray-950 flex flex-col items-center justify-center gap-6 px-6 text-center">
         <span className="text-7xl">🏆</span>
         <div>
           <h1 className="text-3xl font-black text-white">Workout Complete!</h1>
@@ -256,6 +259,7 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
           Return to Dashboard
         </button>
       </div>
+      </div>
     );
   }
 
@@ -273,7 +277,8 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
     const dashOffset = circ * (1 - restSecs / REST_SECONDS);
 
     return (
-      <div className="fixed inset-0 z-50 bg-gray-950 flex flex-col items-center justify-between py-12 px-6">
+      <div className="fixed inset-0 z-50 flex justify-center bg-black/60">
+      <div className="w-full max-w-md bg-gray-950 flex flex-col items-center justify-between py-12 px-6">
         {/* Header */}
         <div className="flex flex-col items-center gap-1 text-center">
           <span className="text-4xl">✅</span>
@@ -328,12 +333,14 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
           Skip Rest →
         </button>
       </div>
+      </div>
     );
   }
 
   // ── Render: Working ───────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-50 bg-gray-950 flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex justify-center bg-black/60">
+    <div className="w-full max-w-md bg-gray-950 flex flex-col overflow-hidden">
 
       {/* Progress bar */}
       <div className="h-1 bg-gray-800 flex-shrink-0">
@@ -491,6 +498,7 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
           {saving ? '⏳ Saving...' : 'SAVE SET ▶'}
         </button>
       </div>
+    </div>
     </div>
   );
 }
