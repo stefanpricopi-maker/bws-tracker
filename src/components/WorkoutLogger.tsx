@@ -954,7 +954,13 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                         <input
                           type="number"
                           inputMode="numeric"
-                          placeholder={isActivation ? 'fail' : '3–5'}
+                          placeholder={
+                            isActivation
+                              ? 'fail'
+                              : ex.targetReps != null
+                              ? String(ex.targetReps)
+                              : '—'
+                          }
                           value={s.reps}
                           onChange={(e) => handleSetChange(exIdx, si, 'reps', e.target.value)}
                           className={`min-h-[44px] bg-gray-900 rounded-xl text-white text-sm text-center placeholder-gray-600 focus:outline-none transition-colors w-full
