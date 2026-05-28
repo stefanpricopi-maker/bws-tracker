@@ -9,7 +9,7 @@ RUN npm ci --ignore-scripts
 
 # Copy source and build
 COPY . .
-RUN npm run build
+RUN npm run build -- --config astro.config.docker.mjs
 
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
