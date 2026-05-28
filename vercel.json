@@ -1,4 +1,5 @@
 {
   "regions": ["fra1"],
-  "installCommand": "npm ci --legacy-peer-deps"
+  "installCommand": "echo 'skip'",
+  "buildCommand": "npm ci --legacy-peer-deps && npm run build"
 }
