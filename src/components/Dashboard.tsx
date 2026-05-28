@@ -9,10 +9,11 @@ import AlertBanner          from './AlertBanner';
 import WeeklySummary        from './WeeklySummary';
 import ConsistencyHeatmap   from './ConsistencyHeatmap';
 import WeeklyCheckIn        from './WeeklyCheckIn';
+import PhotoVault           from './PhotoVault';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
-type Tab = 'dashboard' | 'workout' | 'diet' | 'profile';
+type Tab = 'dashboard' | 'workout' | 'diet' | 'photos' | 'profile';
 
 interface NavItem {
   id:    Tab;
@@ -21,10 +22,11 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '⊞'  },
-  { id: 'workout',   label: 'Workout',   icon: '🏋'  },
-  { id: 'diet',      label: 'Diet',      icon: '🥗'  },
-  { id: 'profile',   label: 'Profile',   icon: '👤'  },
+  { id: 'dashboard', label: 'Home',    icon: '⊞'  },
+  { id: 'workout',   label: 'Workout', icon: '🏋'  },
+  { id: 'diet',      label: 'Diet',    icon: '🥗'  },
+  { id: 'photos',    label: 'Photos',  icon: '📸'  },
+  { id: 'profile',   label: 'Profile', icon: '👤'  },
 ];
 
 // ── Dashboard tab content ──────────────────────────────────────────────────
@@ -110,6 +112,7 @@ export default function Dashboard() {
         {active === 'dashboard' && <DashboardTab />}
         {active === 'workout'   && <WorkoutLogger />}
         {active === 'diet'      && <DietTracker />}
+        {active === 'photos'    && <PhotoVault />}
         {active === 'profile'   && <ProfileSettings />}
       </div>
     </>

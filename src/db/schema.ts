@@ -21,6 +21,7 @@ export const dailyLogs = sqliteTable('daily_logs', {
   proteinG: real('protein_g'),
   carbsG: real('carbs_g'),
   fatG: real('fat_g'),
+  photoUrl: text('photo_url'),
 });
 
 export const workouts = sqliteTable('workouts', {

@@ -8,8 +8,22 @@ const USER_ID = 1;
 
 // ── GET /api/logs?days=30 ──────────────────────────────────────────────────
 export const GET: APIRoute = async ({ url }) => {
-  const days = parseInt(url.searchParams.get('days') ?? '30', 10);
+  // ?limit=N returns the N most recent rows regardless of date range (used by PhotoVault)
+  const limitParam = url.searchParams.get('limit');
+  if (limitParam) {
+    const limit = Math.min(parseInt(limitParam, 10), 1000);
+    const rows = await db
+      .select()
+      .from(dailyLogs)
+      .where(eq(dailyLogs.userId, USER_ID))
+      .orderBy(desc(dailyLogs.date))
+      .limit(limit);
+    return new Response(JSON.stringify(rows.map(toClientRow)), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
+  const days = parseInt(url.searchParams.get('days') ?? '30', 10);
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
   const cutoffStr = cutoff.toISOString().slice(0, 10);
@@ -20,11 +34,27 @@ export const GET: APIRoute = async ({ url }) => {
     .where(and(eq(dailyLogs.userId, USER_ID), gte(dailyLogs.date, cutoffStr)))
     .orderBy(desc(dailyLogs.date));
 
-  return new Response(JSON.stringify(rows), {
+  return new Response(JSON.stringify(rows.map(toClientRow)), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   });
 };
+
+// Map DB column names (camelCase) to API names (snake_case) expected by components
+function toClientRow(r: typeof dailyLogs.$inferSelect) {
+  return {
+    id:           r.id,
+    user_id:      r.userId,
+    date:         r.date,
+    weight_kg:    r.weightKg,
+    steps:        r.steps,
+    calories_in:  r.caloriesIn,
+    protein_g:    r.proteinG,
+    carbs_g:      r.carbsG,
+    fat_g:        r.fatG,
+    photo_url:    r.photoUrl,
+  };
+}
 
 // ── POST /api/logs ─────────────────────────────────────────────────────────
 // Body (all fields optional except date):
