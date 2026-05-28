@@ -12,20 +12,20 @@ export const GET: APIRoute = async ({ url }) => {
     ?? new Date().toISOString().slice(0, 10);
   const endDate = url.searchParams.get('endDate') ?? undefined;
 
-  const [stored] = await db
-    .select()
-    .from(googleTokens)
-    .where(eq(googleTokens.userId, USER_ID))
-    .limit(1);
-
-  if (!stored) {
-    return new Response(
-      JSON.stringify({ error: 'not_connected', message: 'Google Fit not connected.' }),
-      { status: 401, headers: { 'Content-Type': 'application/json' } },
-    );
-  }
-
   try {
+    const [stored] = await db
+      .select()
+      .from(googleTokens)
+      .where(eq(googleTokens.userId, USER_ID))
+      .limit(1);
+
+    if (!stored) {
+      return new Response(
+        JSON.stringify({ error: 'not_connected', message: 'Google Fit not connected.' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
     const sessions = await fetchWorkoutSessions(
       stored.accessToken,
       stored.refreshToken,

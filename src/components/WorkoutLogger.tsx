@@ -367,8 +367,9 @@ export default function WorkoutLogger() {
       const end = new Date().toISOString().slice(0, 10);
       const start = new Date(Date.now() - 13 * 86_400_000).toISOString().slice(0, 10);
       const res = await fetch(`/api/google-fit-sessions?startDate=${start}&endDate=${end}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message ?? 'Failed');
+      let data: unknown;
+      try { data = await res.json(); } catch { throw new Error('Invalid server response'); }
+      if (!res.ok) throw new Error((data as { message?: string })?.message ?? 'Failed');
       setFitSessions(data);
     } catch (err) {
       showToast('Could not fetch Google Fit sessions.');
