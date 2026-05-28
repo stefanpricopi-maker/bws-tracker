@@ -9,128 +9,98 @@
 export const MESOCYCLE_WEEKS = 8;
 
 /**
- * Block 1 → Block 2 exercise substitution map.
- * Keyed by the Block 1 exercise name. Value is the Block 2 substitute.
- *
- * Swap rationale per entry (shown in UI tooltip):
+ * Block 1 → Block 2 exercise substitution map (Home-Gym: Dumbbells & Bands).
+ * Same muscle groups, different mechanics → breaks adaptation without changing equipment.
  */
 export const EXERCISE_SWAP: Record<string, { block2: string; rationale: string }> = {
   // ── Push ──────────────────────────────────────────────────────────────────
-  'Bench Press': {
-    block2: 'Incline Barbell Press',
-    rationale: 'Shifts load to upper chest; new angle breaks flat-press adaptation.',
+  'Dumbbell Floor Press': {
+    block2: 'Deficit Push-ups',
+    rationale: 'Bodyweight + deficit increases pec stretch; trains end-range strength missing in floor press.',
   },
-  'Overhead Press': {
-    block2: 'Arnold Press',
-    rationale: 'Rotation through the press recruits more anterior and medial delt fibers.',
+  'Dumbbell Overhead Press': {
+    block2: 'Banded Lateral Raises',
+    rationale: 'Band provides ascending resistance curve — maximum tension at peak contraction.',
   },
-  'Incline Dumbbell Press': {
-    block2: 'Cable Chest Press',
-    rationale: 'Constant cable tension keeps pecs under load through full ROM.',
+  'Deficit Push-ups': {
+    block2: 'Banded Chest Flyes',
+    rationale: 'Isolation fly adds adduction component; hits sternal head that push-up misses.',
   },
-  'Lateral Raises': {
-    block2: 'Cable Lateral Raises',
-    rationale: 'Cable keeps resistance consistent at the bottom — no free-weight dead zone.',
+  'Banded Chest Flyes': {
+    block2: 'Deficit Push-ups',
+    rationale: 'Compound movement re-integrates tricep and shoulder into the push pattern.',
   },
-  'Tricep Pushdowns': {
-    block2: 'Tricep Dips',
-    rationale: 'Bodyweight compound; adds stretch at the top that cable misses.',
+  'Dumbbell Lateral Raises': {
+    block2: 'Banded Lateral Raises',
+    rationale: 'Band keeps medial delt under tension at the bottom — eliminates free-weight dead zone.',
   },
-  'Overhead Tricep Extensions': {
-    block2: 'Skull Crushers',
-    rationale: 'Longer lever at full extension → greater long-head stretch stimulus.',
+  'Banded Triceps Pushdowns': {
+    block2: 'Dumbbell Floor Skullcrushers',
+    rationale: 'Heavier loaded eccentric targets long-head stretch that band pushdowns cannot achieve.',
+  },
+  'Dumbbell Floor Skullcrushers': {
+    block2: 'Banded Triceps Pushdowns',
+    rationale: 'High-rep band work pumps blood into the tricep; active recovery from heavy loading.',
   },
 
   // ── Pull ──────────────────────────────────────────────────────────────────
-  'Barbell Row': {
-    block2: 'Chest-Supported Dumbbell Row',
-    rationale: 'Chest support removes lower-back from the equation; pure lat/rhomboid work.',
+  'Dumbbell Bent-Over Row': {
+    block2: 'Single-Arm Dumbbell Row',
+    rationale: 'Unilateral loading corrects left/right strength asymmetry built in bilateral Block 1.',
   },
-  'Pull-Ups': {
-    block2: 'Lat Pulldown',
-    rationale: 'Adjustable load allows progressive overload past bodyweight plateau.',
+  'Single-Arm Dumbbell Row': {
+    block2: 'Dumbbell Bent-Over Row',
+    rationale: 'Bilateral pattern allows heavier loading for lat thickness overload.',
   },
-  'Seated Cable Row': {
-    block2: 'T-Bar Row',
-    rationale: 'Neutral grip + plate loading shifts emphasis to mid-back thickness.',
+  'Banded Lat Pulldown': {
+    block2: 'Dumbbell Pullover',
+    rationale: 'Pullover trains lat in full stretch under load — different torque curve to pulldown.',
   },
-  'Face Pulls': {
-    block2: 'Rear Delt Fly',
-    rationale: 'Dumbbell fly hits posterior delt in abduction; complements internal rotation from face pulls.',
+  'Dumbbell Pullover': {
+    block2: 'Banded Lat Pulldown',
+    rationale: 'Vertical pull pattern re-trains lat shortening; complements pullover stretch stimulus.',
   },
-  'Barbell Curl': {
-    block2: 'EZ-Bar Curl',
-    rationale: 'Slight supination angle reduces wrist strain accumulated over Block 1.',
+  'Banded Face Pulls': {
+    block2: 'Dumbbell Reverse Flyes',
+    rationale: 'Dumbbell fly hits posterior delt in pure abduction; pairs with rotator work from face pulls.',
   },
-  'Hammer Curl': {
-    block2: 'Incline Dumbbell Curl',
-    rationale: 'Incline position stretches long head of bicep — greatest hypertrophy stimulus.',
+  'Dumbbell Reverse Flyes': {
+    block2: 'Banded Face Pulls',
+    rationale: 'External rotation component of face pulls targets infraspinatus for shoulder health.',
+  },
+  'Dumbbell Biceps Curl': {
+    block2: 'Banded Hammer Curl',
+    rationale: 'Neutral grip band curl targets brachialis and brachioradialis for arm thickness.',
+  },
+  'Banded Hammer Curl': {
+    block2: 'Dumbbell Biceps Curl',
+    rationale: 'Supinated dumbbell curl maximises bicep peak contraction and forearm supination.',
   },
 
   // ── Legs ──────────────────────────────────────────────────────────────────
-  'Barbell Squat': {
-    block2: 'Hack Squat',
-    rationale: 'Machine removes spinal load; maintains quad stimulus with zero lower-back fatigue.',
+  'Bulgarian Split Squats': {
+    block2: 'Single-Leg RDLs',
+    rationale: 'Shifts from quad-dominant to posterior chain — hip hinge pattern balances split squat adaptation.',
   },
-  'Romanian Deadlift': {
-    block2: 'Nordic Curl',
-    rationale: 'Eccentric-dominant; targets hamstring lengthening that RDL misses.',
+  'Dumbbell Goblet Squats': {
+    block2: 'Bulgarian Split Squats',
+    rationale: 'Greater unilateral demand and ROM; breaks the bilateral symmetry pattern.',
   },
-  'Leg Press': {
-    block2: 'Bulgarian Split Squat',
-    rationale: 'Unilateral loading corrects bilateral leg strength imbalances built in Block 1.',
+  'Dumbbell Romanian Deadlifts': {
+    block2: 'Single-Leg RDLs',
+    rationale: 'Unilateral RDL adds balance demand and corrects inter-limb hamstring asymmetry.',
   },
-  'Leg Curl': {
-    block2: 'Stiff-Leg Deadlift',
-    rationale: 'Hip-hinge pattern hits hamstrings from hip; leg curl only covers knee flexion.',
+  'Single-Leg RDLs': {
+    block2: 'Dumbbell Romanian Deadlifts',
+    rationale: 'Bilateral RDL allows heavier loading for hamstring strength overload.',
   },
-  'Calf Raises': {
-    block2: 'Donkey Calf Raises',
-    rationale: 'Hip-flexed position pre-stretches gastrocnemius for deeper ROM.',
+  'Banded Lying Leg Curls': {
+    block2: 'Dumbbell Romanian Deadlifts',
+    rationale: 'Hip-hinge lengthened-position hamstring work — greater growth stimulus than knee-flexion alone.',
   },
-
-  // ── Upper ─────────────────────────────────────────────────────────────────
-  'Incline Bench Press': {
-    block2: 'Flat Dumbbell Press',
-    rationale: 'Dumbbell freedom of movement prevents the groove compensation built with barbell.',
-  },
-  'Incline Dumbbell Curl': {
-    block2: 'Preacher Curl',
-    rationale: 'Arm-braced position eliminates shoulder swing; strict bicep isolation.',
-  },
-  'Cable Fly': {
-    block2: 'Dumbbell Fly',
-    rationale: 'Greater stretch at bottom position; higher peak tension through pec.',
-  },
-  'Tricep Dips': {
-    block2: 'Close-Grip Bench Press',
-    rationale: 'Barbell adds easy progressive overload; safer on shoulder joint long-term.',
-  },
-  'Concentration Curl': {
-    block2: 'Drag Curl',
-    rationale: 'Elbow travels behind torso — targets brachialis and long head differently.',
-  },
-
-  // ── Legs + Arms ───────────────────────────────────────────────────────────
-  'Front Squat': {
-    block2: 'Goblet Squat',
-    rationale: 'Dumbbell goblet removes wrist strain from front rack; same upright torso benefit.',
-  },
-  'Crossbody Hammer Curl': {
-    block2: 'Reverse Curl',
-    rationale: 'Overhand grip shifts load to brachialis and brachioradialis for forearm balance.',
-  },
-  'Leg Extension': {
-    block2: 'Step-Ups',
-    rationale: 'Functional unilateral pattern; avoids patellar compression from machine.',
-  },
-  'Preacher Curl': {
-    block2: 'Spider Curl',
-    rationale: 'Prone position keeps arm vertical — maximum peak contraction stimulus.',
-  },
-  'Seated Calf Raise': {
-    block2: 'Standing Calf Raise',
-    rationale: 'Straight-knee position emphasises gastrocnemius over soleus.',
+  'Single-Leg Calf Raises': {
+    block2: 'Dumbbell Goblet Squats',
+    rationale: 'Adds quad volume; calves already receive indirect work from split squat variants.',
   },
 };
 
