@@ -11,10 +11,10 @@ import ConsistencyHeatmap   from './ConsistencyHeatmap';
 import WeeklyCheckIn        from './WeeklyCheckIn';
 import PhotoVault           from './PhotoVault';
 import GoalForecaster       from './GoalForecaster';
-import ExerciseManager      from './ExerciseManager';
 import WorkoutPlayer        from './WorkoutPlayer';
 import type { PlannedExercise } from './WorkoutPlayer';
 import DailyActionHero      from './DailyActionHero';
+import PullToRefresh        from './PullToRefresh';
 import Onboarding, { needsOnboarding, markOnboardingDone, clearOnboarding } from './Onboarding';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
@@ -42,22 +42,26 @@ interface DashboardTabProps {
 }
 
 function DashboardTab({ onNavigate }: DashboardTabProps) {
-  return (
-    <div className="flex flex-col gap-6">
-      <DailyActionHero onNavigate={onNavigate} />
-      <StepTracker />
+  const [refreshKey, setRefreshKey] = useState(0);
 
-      <div className="flex flex-col gap-4">
-        <p className="text-xs font-semibold uppercase tracking-widest text-gray-600 px-0.5">
-          Insights
-        </p>
-        <AlertBanner />
-        <GoalForecaster />
-        <ConsistencyHeatmap />
-        <WeeklyCheckIn />
-        <WeeklySummary />
+  return (
+    <PullToRefresh onRefresh={() => setRefreshKey((k) => k + 1)}>
+      <div key={refreshKey} className="flex flex-col gap-6">
+        <DailyActionHero onNavigate={onNavigate} refreshToken={refreshKey} />
+        <StepTracker />
+
+        <div className="flex flex-col gap-4">
+          <p className="text-xs font-semibold uppercase tracking-widest text-gray-600 px-0.5">
+            Insights
+          </p>
+          <AlertBanner />
+          <GoalForecaster />
+          <ConsistencyHeatmap />
+          <WeeklyCheckIn />
+          <WeeklySummary />
+        </div>
       </div>
-    </div>
+    </PullToRefresh>
   );
 }
 
@@ -112,26 +116,7 @@ interface WorkoutTabProps {
 }
 
 function WorkoutTab({ onStartPlayer }: WorkoutTabProps) {
-  const [sub, setSub] = useState<'log' | 'library'>('log');
-  return (
-    <div className="flex flex-col gap-4">
-      {/* Sub-tab toggle */}
-      <div className="flex rounded-xl bg-gray-800 border border-gray-700 p-1 gap-1">
-        {(['log', 'library'] as const).map((s) => (
-          <button
-            key={s}
-            onClick={() => setSub(s)}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors capitalize
-              ${sub === s ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
-          >
-            {s === 'log' ? '🏋 Log Workout' : '📚 Exercise Library'}
-          </button>
-        ))}
-      </div>
-      {sub === 'log'     && <WorkoutLogger onStartPlayer={onStartPlayer} />}
-      {sub === 'library' && <ExerciseManager />}
-    </div>
-  );
+  return <WorkoutLogger onStartPlayer={onStartPlayer} />;
 }
 
 // ── Main component ─────────────────────────────────────────────────────────

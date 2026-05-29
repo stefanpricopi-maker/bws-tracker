@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { autoRegulate as autoRegulateCalc, calcDeloadWeight } from '../lib/fitness';
 import { getExerciseForBlock, EXERCISE_SWAP, MESOCYCLE_WEEKS } from '../lib/periodization';
 import type { PlannedExercise } from './WorkoutPlayer';
+import ExerciseManager from './ExerciseManager';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -245,6 +246,8 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
   const [showSessions, setShowSessions] = useState(false);
   const [meso, setMeso] = useState<MesocycleStatus | null>(null);
   const [advancingBlock, setAdvancingBlock] = useState(false);
+  const [showLibrary, setShowLibrary]       = useState(false);
+  const [confirmBlock, setConfirmBlock]     = useState(false);
 
   // Refs for auto-advance focus: key = "exIdx-setIdx-w" | "exIdx-setIdx-r"
   const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
@@ -276,7 +279,8 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
   }
 
   // ── AI Weekly Planner state ────────────────────────────────────────────────
-  interface AiPlanDay { day_name: string; category: string; exercises: string[] }
+  interface AiPlanExercise { name: string; sets: number }
+  interface AiPlanDay { day_name: string; category: string; exercises: AiPlanExercise[] }
   interface AiPlan    { split_type: string; days: AiPlanDay[] }
 
   const [plannerOpen, setPlannerOpen]     = useState(false);
@@ -545,8 +549,23 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
 
   const day = SPLIT[selectedDay];
 
+  if (showLibrary) {
+    return (
+      <div className="flex flex-col gap-4 pb-8">
+        <button
+          type="button"
+          onClick={() => setShowLibrary(false)}
+          className="flex items-center gap-2 text-sm font-semibold text-violet-400 hover:text-violet-300"
+        >
+          ← Back to workout
+        </button>
+        <ExerciseManager />
+      </div>
+    );
+  }
+
   return (
-    <div className="relative flex flex-col gap-4 pb-28">
+    <div className="relative flex flex-col gap-4 pb-6">
 
       {/* ── Mesocycle complete banner ──────────────────────────────────────── */}
       {meso?.mesocycleComplete && (
@@ -587,7 +606,7 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
           </div>
           <button
             type="button"
-            onClick={handleAdvanceBlock}
+            onClick={() => setConfirmBlock(true)}
             disabled={advancingBlock}
             className="w-full rounded-xl bg-violet-600 hover:bg-violet-500 active:bg-violet-700
                        text-white font-bold py-3 text-sm transition-colors
@@ -597,6 +616,28 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
               ? 'Updating…'
               : `✅ Initiate Block ${meso.currentBlock === 1 ? 2 : 1}`}
           </button>
+          {confirmBlock && (
+            <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 pb-6 px-4">
+              <div className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-3xl p-6 flex flex-col gap-4">
+                <p className="text-white font-bold text-center">Start Block {meso.currentBlock === 1 ? 2 : 1}?</p>
+                <p className="text-xs text-gray-400 text-center">Exercises will swap for the next mesocycle block.</p>
+                <button
+                  type="button"
+                  onClick={() => { setConfirmBlock(false); void handleAdvanceBlock(); }}
+                  className="w-full py-3 rounded-xl bg-violet-600 text-white font-bold"
+                >
+                  Yes, switch block
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmBlock(false)}
+                  className="w-full py-3 rounded-xl bg-gray-800 text-gray-300 font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -649,9 +690,133 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
         );
       })()}
 
+      {/* ── AI Weekly Planner (prominent, near top) ─────────────────────────── */}
+      <div className="rounded-2xl border border-violet-500/30 bg-violet-900/10 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setPlannerOpen((o) => !o)}
+          className="w-full flex items-center justify-between px-4 py-3 text-left"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-base leading-none">🤖</span>
+            <div>
+              <p className="text-sm font-semibold text-white">AI Weekly Routine</p>
+              <p className="text-[11px] text-gray-400">Generate a plan from your exercise library</p>
+            </div>
+          </div>
+          <span className="text-gray-500 text-xs">{plannerOpen ? '▲' : '▼'}</span>
+        </button>
+
+        {plannerOpen && (
+          <div className="border-t border-violet-500/20 p-4 flex flex-col gap-4">
+            {!aiPlan && (
+              <button
+                type="button"
+                onClick={generatePlan}
+                disabled={generatingPlan}
+                className="min-h-[44px] w-full bg-violet-600 hover:bg-violet-500 active:bg-violet-700
+                           disabled:opacity-60 text-white font-semibold text-sm rounded-xl transition-colors"
+              >
+                {generatingPlan ? '⏳ Generating...' : '✨ Generate 5-Day Split'}
+              </button>
+            )}
+            {planError && (
+              <div className="rounded-xl px-4 py-3 bg-red-900/30 border border-red-500/30 text-red-300 text-xs">
+                ⚠️ {planError}
+              </div>
+            )}
+            {aiPlan && (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                    {aiPlan.split_type ?? '5-day'} split
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { setAiPlan(null); setPlanError(null); }}
+                    className="text-xs text-gray-500 hover:text-gray-300 underline"
+                  >
+                    Regenerate
+                  </button>
+                </div>
+                {aiPlan.days?.map((d, idx) => {
+                  const isRest = !d.exercises?.length || d.category === 'Rest';
+                  const catColor: Record<string, string> = {
+                    Push: 'border-orange-500/40 bg-orange-500/5',
+                    Pull: 'border-blue-500/40 bg-blue-500/5',
+                    Legs: 'border-green-500/40 bg-green-500/5',
+                    Upper:'border-violet-500/40 bg-violet-500/5',
+                    Rest: 'border-gray-700 bg-gray-800/30',
+                  };
+                  return (
+                    <div
+                      key={idx}
+                      className={`rounded-xl border p-3 flex flex-col gap-2 ${catColor[d.category] ?? 'border-gray-700 bg-gray-800/30'}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-white text-sm font-semibold">{d.day_name}</p>
+                          <p className="text-gray-400 text-xs">{d.category}</p>
+                        </div>
+                        {!isRest && onStartPlayer && (
+                          <div className="flex flex-col gap-1.5 items-end flex-shrink-0 ml-2">
+                            <button
+                              type="button"
+                              onClick={() => onStartPlayer(
+                                d.exercises.map((e) => ({ name: e.name, sets: e.sets })),
+                                d.category,
+                              )}
+                              className="text-xs font-bold px-3 py-1.5 rounded-xl
+                                         bg-green-600 hover:bg-green-500 text-white transition-colors whitespace-nowrap"
+                            >
+                              ▶ Start Player
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => loadAiDay(d.exercises)}
+                              className="text-xs font-bold px-3 py-1.5 rounded-xl
+                                         bg-gray-700 hover:bg-gray-600 text-white transition-colors whitespace-nowrap"
+                            >
+                              Load to Logger
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {isRest ? (
+                        <p className="text-gray-500 text-xs italic">Rest & Recovery</p>
+                      ) : (
+                        <ul className="flex flex-col gap-1">
+                          {d.exercises.map((ex) => (
+                            <li key={ex.name} className="flex items-center justify-between text-xs text-gray-300">
+                              <span className="flex items-start gap-1.5">
+                                <span className="text-gray-600 mt-0.5">·</span> {ex.name}
+                              </span>
+                              <span className="text-gray-600 flex-shrink-0 ml-2">{ex.sets}×</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Day label + Google Fit sync */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-base font-bold text-white">{day.label}</h2>
+        <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setShowLibrary(true)}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gray-800 border border-gray-700
+                     text-gray-300 text-xs font-semibold hover:text-white hover:border-gray-600 transition-colors"
+        >
+          📚 Library
+        </button>
         <button
           onClick={handleSyncSessions}
           disabled={syncingSessions}
@@ -664,6 +829,7 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
           </svg>
           {syncingSessions ? 'Syncing…' : 'Google Fit'}
         </button>
+        </div>
       </div>
 
       {/* Google Fit sessions panel */}
@@ -752,125 +918,6 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
           </p>
         </div>
       )}
-
-      {/* ── AI Weekly Planner ───────────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-gray-700 bg-gray-800/50 overflow-hidden">
-        {/* Toggle header */}
-        <button
-          onClick={() => setPlannerOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-4 py-3 text-left"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-base leading-none">🤖</span>
-            <div>
-              <p className="text-sm font-semibold text-white">AI Weekly Routine</p>
-              <p className="text-[11px] text-gray-400">Generate a plan from your exercise library</p>
-            </div>
-          </div>
-          <span className="text-gray-500 text-xs">{plannerOpen ? '▲' : '▼'}</span>
-        </button>
-
-        {plannerOpen && (
-          <div className="border-t border-gray-700 p-4 flex flex-col gap-4">
-            {/* Generate button */}
-            {!aiPlan && (
-              <button
-                onClick={generatePlan}
-                disabled={generatingPlan}
-                className="min-h-[44px] w-full bg-violet-600 hover:bg-violet-500 active:bg-violet-700
-                           disabled:opacity-60 text-white font-semibold text-sm rounded-xl transition-colors"
-              >
-                {generatingPlan ? '⏳ Generating...' : '✨ Generate 5-Day Split'}
-              </button>
-            )}
-
-            {/* Error */}
-            {planError && (
-              <div className="rounded-xl px-4 py-3 bg-red-900/30 border border-red-500/30 text-red-300 text-xs">
-                ⚠️ {planError}
-              </div>
-            )}
-
-            {/* Plan cards */}
-            {aiPlan && (
-              <>
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-                    {aiPlan.split_type ?? '5-day'} split
-                  </p>
-                  <button
-                    onClick={() => { setAiPlan(null); setPlanError(null); }}
-                    className="text-xs text-gray-500 hover:text-gray-300 underline"
-                  >
-                    Regenerate
-                  </button>
-                </div>
-
-                {aiPlan.days?.map((d, idx) => {
-                  const isRest = !d.exercises?.length || d.category === 'Rest';
-                  const catColor: Record<string, string> = {
-                    Push: 'border-orange-500/40 bg-orange-500/5',
-                    Pull: 'border-blue-500/40 bg-blue-500/5',
-                    Legs: 'border-green-500/40 bg-green-500/5',
-                    Upper:'border-violet-500/40 bg-violet-500/5',
-                    Rest: 'border-gray-700 bg-gray-800/30',
-                  };
-                  return (
-                    <div
-                      key={idx}
-                      className={`rounded-xl border p-3 flex flex-col gap-2 ${catColor[d.category] ?? 'border-gray-700 bg-gray-800/30'}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-white text-sm font-semibold">{d.day_name}</p>
-                          <p className="text-gray-400 text-xs">{d.category}</p>
-                        </div>
-                        {!isRest && (
-                          <div className="flex flex-col gap-1.5 items-end flex-shrink-0 ml-2">
-                            {onStartPlayer && (
-                              <button
-                                onClick={() => onStartPlayer(
-                                  d.exercises.map((e) => ({ name: e.name, sets: e.sets })),
-                                  d.category,
-                                )}
-                                className="text-xs font-bold px-3 py-1.5 rounded-xl
-                                           bg-green-600 hover:bg-green-500 text-white transition-colors whitespace-nowrap"
-                              >
-                                ▶ Start Player
-                              </button>
-                            )}
-                            <button
-                              onClick={() => loadAiDay(d.exercises)}
-                              className="text-xs font-bold px-3 py-1.5 rounded-xl
-                                         bg-gray-700 hover:bg-gray-600 text-white transition-colors whitespace-nowrap"
-                            >
-                              Load to Logger
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      {isRest ? (
-                        <p className="text-gray-500 text-xs italic">Rest & Recovery</p>
-                      ) : (
-                        <ul className="flex flex-col gap-1">
-                          {d.exercises.map((ex) => (
-                            <li key={ex.name} className="flex items-center justify-between text-xs text-gray-300">
-                              <span className="flex items-start gap-1.5">
-                                <span className="text-gray-600 mt-0.5">·</span> {ex.name}
-                              </span>
-                              <span className="text-gray-600 flex-shrink-0 ml-2">{ex.sets}×</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  );
-                })}
-              </>
-            )}
-          </div>
-        )}
-      </div>
 
       {/* Rest day message */}
       {day.isRest ? (
@@ -969,6 +1016,7 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                 {ex.sets.map((s, si) => {
                   const isMiniSet = s.setLabel.startsWith('M');
                   const isActivation = s.setLabel === 'ACT';
+                  const setFilled = s.weight.trim() !== '' && s.reps.trim() !== '';
                   return (
                     <div key={si}>
                       {/* 10s rest hint before mini-sets */}
@@ -977,7 +1025,8 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                           ⏱ 10 sec rest between mini-sets
                         </p>
                       )}
-                      <div className="grid grid-cols-[40px_1fr_1fr] gap-2 items-center">
+                      <div className={`grid grid-cols-[40px_1fr_1fr] gap-2 items-center rounded-xl p-1 transition-colors
+                        ${setFilled ? 'bg-emerald-900/25 ring-1 ring-emerald-600/40' : ''}`}>
                         <span className={`text-[10px] font-bold text-center leading-none px-0.5
                           ${isActivation ? 'text-amber-400' : isMiniSet ? 'text-violet-400' : 'text-gray-400'}`}>
                           {s.setLabel}
@@ -1028,29 +1077,26 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
             </div>
             );
           })}
-        </>
-      )}
 
-      {/* Floating Finish Workout button */}
-      {!day.isRest && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-md px-4 z-40">
-          <button
-            onClick={handleFinish}
-            disabled={isSubmitting}
-            className="w-full min-h-[52px] bg-violet-600 hover:bg-violet-500 active:bg-violet-700
-                       disabled:opacity-60 disabled:cursor-not-allowed
-                       text-white font-bold text-sm rounded-2xl
-                       shadow-lg shadow-violet-900/40
-                       transition-colors duration-150"
-          >
-            {isSubmitting ? 'Saving...' : 'Finish Workout'}
-          </button>
-        </div>
+          {!day.isRest && (
+            <button
+              type="button"
+              onClick={handleFinish}
+              disabled={isSubmitting}
+              className="w-full min-h-[52px] mt-2 bg-violet-600 hover:bg-violet-500 active:bg-violet-700
+                         disabled:opacity-60 disabled:cursor-not-allowed
+                         text-white font-bold text-sm rounded-2xl
+                         shadow-lg shadow-violet-900/40 transition-colors duration-150"
+            >
+              {isSubmitting ? 'Saving...' : 'Finish Workout'}
+            </button>
+          )}
+        </>
       )}
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-36 left-1/2 -translate-x-1/2 z-50
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50
                         bg-gray-700 text-white text-sm font-medium
                         px-5 py-3 rounded-2xl shadow-xl border border-gray-600
                         animate-fade-in">

@@ -38,6 +38,10 @@ function pct(consumed: number, target: number) {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+function caloriesFromMacros(protein: number, carbs: number, fat: number): number {
+  return Math.round(protein * 4 + carbs * 4 + fat * 9);
+}
+
 // ── Sub-components ─────────────────────────────────────────────────────────
 
 interface MacroBarProps {
@@ -94,11 +98,16 @@ interface Intake {
 
 const EMPTY: Intake = { calories: 0, protein: 0, carbs: 0, fat: 0 };
 
-interface SyncWearableButtonProps {
-  onActiveBurn: (kcal: number) => void;
+interface WearableSyncResult {
+  activeCalories: number;
+  steps: number;
 }
 
-function SyncWearableButton({ onActiveBurn }: SyncWearableButtonProps) {
+interface SyncWearableButtonProps {
+  onSync: (data: WearableSyncResult) => void;
+}
+
+function SyncWearableButton({ onSync }: SyncWearableButtonProps) {
   const [syncing, setSyncing]     = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [synced, setSynced]       = useState(false);
@@ -109,7 +118,7 @@ function SyncWearableButton({ onActiveBurn }: SyncWearableButtonProps) {
     setSynced(false);
     try {
       const res = await fetch(`/api/sync/google-fit?date=${today()}`);
-      let data: { activeCalories?: number; error?: string; message?: string } = {};
+      let data: { activeCalories?: number; steps?: number; error?: string; message?: string } = {};
       try {
         data = await res.json();
       } catch {
@@ -122,7 +131,10 @@ function SyncWearableButton({ onActiveBurn }: SyncWearableButtonProps) {
         }
         throw new Error(data.message ?? 'Sync failed');
       }
-      onActiveBurn(data.activeCalories ?? 0);
+      onSync({
+        activeCalories: data.activeCalories ?? 0,
+        steps:          data.steps ?? 0,
+      });
       setSynced(true);
     } catch (err) {
       setSyncError(err instanceof Error ? err.message : 'Sync failed');
@@ -178,7 +190,7 @@ export default function DietTracker() {
   const [scanning, setScanning]   = useState(false);
   const [scanStatus, setScanStatus] = useState<'idle' | 'ok' | 'err'>('idle');
   const [preview, setPreview]     = useState<string | null>(null);
-  const [activeBurn, setActiveBurn] = useState<number | null>(null);
+  const [wearableSync, setWearableSync] = useState<WearableSyncResult | null>(null);
   // Macro-Solver state
   const [solving, setSolving]       = useState(false);
   const [mealPlan, setMealPlan]     = useState<MealPlan | null>(null);
@@ -186,7 +198,26 @@ export default function DietTracker() {
   const [logging, setLogging]       = useState(false);
   const [logStatus, setLogStatus]   = useState<'idle' | 'ok' | 'err'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const handleActiveBurn = useCallback((kcal: number) => setActiveBurn(kcal), []);
+  const handleWearableSync = useCallback((data: WearableSyncResult) => setWearableSync(data), []);
+
+  function updateMacroField(key: 'protein' | 'carbs' | 'fat', value: string) {
+    setForm((f) => {
+      const next = { ...f, [key]: value };
+      const p = Number(next.protein) || 0;
+      const c = Number(next.carbs)   || 0;
+      const fat = Number(next.fat)   || 0;
+      if (p > 0 || c > 0 || fat > 0) {
+        next.calories = String(caloriesFromMacros(p, c, fat));
+      }
+      return next;
+    });
+  }
+
+  const computedCalories = caloriesFromMacros(
+    Number(form.protein) || 0,
+    Number(form.carbs)   || 0,
+    Number(form.fat)     || 0,
+  );
 
   async function handleSolveMacros() {
     setSolving(true);
@@ -562,40 +593,45 @@ export default function DietTracker() {
         </div>
       )}
 
-      {/* Active burn banner (shown after wearable sync) */}
-      {activeBurn !== null && (() => {
-        // How much extra to eat back: 50% of active burn, capped at 500 kcal.
-        // Your calorie target (1850) already includes a planned deficit from TDEE.
-        // Eating back 100% of active burn would erase that deficit entirely.
-        // The 50% rule preserves most of the deficit while avoiding excessive under-eating.
-        const eatBack     = Math.min(Math.round(activeBurn * 0.5), 500);
+      {/* Google Fit activity banner (shown after wearable sync) */}
+      {wearableSync !== null && (() => {
+        const { activeCalories, steps } = wearableSync;
+        // Eat-back only for unusually high movement days (not normal morning NEAT).
+        const eatBack     = Math.min(Math.round(activeCalories * 0.5), 500);
         const adjustedTarget = TARGETS.calories + eatBack;
-        const isHigh      = activeBurn >= 600;
+        const isHigh      = activeCalories >= 600;
 
         return (
           <div
-            className="rounded-xl px-4 py-3 flex flex-col gap-1"
+            className="rounded-xl px-4 py-3 flex flex-col gap-1.5"
             style={{ backgroundColor: '#1f1a0e', border: '1px solid #78350f' }}
           >
             <p className="text-xs font-semibold text-amber-400">
-              🔥 Active burn today: {activeBurn.toLocaleString()} kcal
+              Google Fit — mișcare de azi: {activeCalories.toLocaleString()} kcal
+            </p>
+            <p className="text-[11px] text-amber-300/60 leading-relaxed">
+              De la miezul nopții, nu doar antrenament. Google Fit estimează din pași,
+              ceas (Huawei → Health Sync) și activitate generală — la 10:40 poate include
+              tot ce ai făcut dimineața (mers, treburii).
+              {steps > 0 && (
+                <> Pași sincronizați: <span className="font-semibold text-amber-300/80">{steps.toLocaleString()}</span>.</>
+              )}
             </p>
             {isHigh ? (
               <>
                 <p className="text-xs text-amber-300/80">
-                  That's a big output. Eating back ~50% ({eatBack} kcal) keeps your deficit healthy
-                  without wiping it out. Suggested intake today:{' '}
+                  Zi cu multă mișcare. Mănâncă înapoi ~50% ({eatBack} kcal) dacă vrei — țintă sugerată:{' '}
                   <span className="font-bold text-amber-300">{adjustedTarget.toLocaleString()} kcal</span>.
                 </p>
-                <p className="text-[10px] text-amber-300/40 mt-0.5">
-                  Eating back 100% ({(TARGETS.calories + activeBurn).toLocaleString()} kcal) would
-                  erase your planned deficit entirely.
+                <p className="text-[10px] text-amber-300/40">
+                  Verifică în app-ul Google Fit aceeași valoare; uneori ceasul supraestimează.
                 </p>
               </>
             ) : (
               <p className="text-xs text-amber-300/70">
-                Deficit is on track. No adjustment needed — your target stays{' '}
-                <span className="font-bold text-amber-300">{TARGETS.calories.toLocaleString()} kcal</span>.
+                Sub pragul de ajustare (600 kcal). Ținta rămâne{' '}
+                <span className="font-bold text-amber-300">{TARGETS.calories.toLocaleString()} kcal</span>
+                {' '}— nu e nevoie să compensezi dimineața obișnuită.
               </p>
             )}
           </div>
@@ -610,7 +646,7 @@ export default function DietTracker() {
             Log today's intake
           </span>
           <div className="flex items-center gap-2">
-          <SyncWearableButton onActiveBurn={handleActiveBurn} />
+          <SyncWearableButton onSync={handleWearableSync} />
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -672,13 +708,13 @@ export default function DietTracker() {
         )}
 
         <div className="grid grid-cols-2 gap-2">
-          {([ 
-            ['calories', 'Calories', 'kcal', '🔥'],
-            ['protein',  'Protein',  'g',    '💪'],
-            ['fat',      'Fat',      'g',    '🥑'],
-            ['carbs',    'Carbs',    'g',    '🍚'],
-          ] as [keyof typeof form, string, string, string][]).map(
-            ([key, label, unit, icon]) => (
+          {([
+            ['protein',  'Protein',  'g',    '💪', false],
+            ['carbs',    'Carbs',    'g',    '🍚', false],
+            ['fat',      'Fat',      'g',    '🥑', false],
+            ['calories', 'Calories', 'kcal', '🔥', true],
+          ] as [keyof typeof form, string, string, string, boolean][]).map(
+            ([key, label, unit, icon, isCalories]) => (
               <div key={key} className="flex flex-col gap-1">
                 <label className="flex items-center gap-1 text-[11px] font-semibold text-gray-400 px-1">
                   <span>{icon}</span>
@@ -689,13 +725,24 @@ export default function DietTracker() {
                   type="number"
                   min="0"
                   step={key === 'calories' ? '1' : '0.1'}
-                  placeholder="0"
+                  placeholder={isCalories && computedCalories > 0 ? String(computedCalories) : '0'}
                   value={form[key]}
-                  onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                  onChange={(e) => {
+                    if (key === 'protein' || key === 'carbs' || key === 'fat') {
+                      updateMacroField(key, e.target.value);
+                    } else {
+                      setForm((f) => ({ ...f, [key]: e.target.value }));
+                    }
+                  }}
                   className="rounded-xl bg-gray-800 border border-gray-700 px-3 py-3
                              text-white placeholder-gray-600 text-sm
                              focus:outline-none focus:border-violet-500 transition-colors"
                 />
+                {isCalories && computedCalories > 0 && (
+                  <p className="text-[10px] text-gray-500 px-1">
+                    Auto: 4×P + 4×C + 9×F = {computedCalories} kcal
+                  </p>
+                )}
               </div>
             )
           )}

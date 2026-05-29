@@ -6,6 +6,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { autoRegulate as autoRegulateCalc, calcDeloadWeight } from '../lib/fitness';
+import { restSecondsForExercise } from '../lib/restDuration';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -32,9 +33,25 @@ interface ExStats {
 
 type Phase = 'loading' | 'working' | 'resting' | 'complete';
 
-// ── Constants ────────────────────────────────────────────────────────────────
-
-const REST_SECONDS = 60;
+function notifyRestComplete() {
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    navigator.vibrate([120, 60, 120]);
+  }
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.25);
+  } catch {
+    /* audio optional */
+  }
+}
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -45,7 +62,9 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
   const [stats, setStats]               = useState<Record<string, ExStats>>({});
   const [weight, setWeight]             = useState('');
   const [reps, setReps]                 = useState('');
-  const [restSecs, setRestSecs]         = useState(REST_SECONDS);
+  const [restSecs, setRestSecs]         = useState(90);
+  const [restTotal, setRestTotal]       = useState(90);
+  const [showPlan, setShowPlan]         = useState(false);
   const [workoutId, setWorkoutId]       = useState<number | null>(null);
   const [saving, setSaving]             = useState(false);
   const [saveError, setSaveError]       = useState<string | null>(null);
@@ -112,14 +131,17 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
 
   // ── Rest-timer tick ───────────────────────────────────────────────────────
 
-  function startRestTimer(onDone: () => void) {
-    setRestSecs(REST_SECONDS);
+  function startRestTimer(seconds: number, onDone: () => void) {
+    const dur = Math.max(30, seconds);
+    setRestTotal(dur);
+    setRestSecs(dur);
     setPhase('resting');
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setRestSecs((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current!);
+          notifyRestComplete();
           onDone();
           return 0;
         }
@@ -152,6 +174,20 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
     }
     setSaveError(null);
   }, [exIdx, setIdx, exercises, stats]);
+
+  const skipExercise = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    const nextEx = exIdx + 1;
+    if (nextEx >= exercises.length) {
+      setPhase('complete');
+    } else {
+      setExIdx(nextEx);
+      setSetIdx(1);
+      prefillInputs(exercises[nextEx].name, stats);
+      setPhase('working');
+    }
+    setSaveError(null);
+  }, [exIdx, exercises, stats]);
 
   // ── Save set to DB ────────────────────────────────────────────────────────
 
@@ -193,16 +229,13 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
 
     const ex = exercises[exIdx];
     if (setIdx < ex.sets) {
-      // More sets remaining — start rest timer
-      startRestTimer(advanceAfterRest);
+      startRestTimer(restSecondsForExercise(ex.name), advanceAfterRest);
     } else {
-      // Last set of this exercise
       const nextEx = exIdx + 1;
       if (nextEx >= exercises.length) {
         setPhase('complete');
       } else {
-        // Brief 30-second rest between exercises
-        startRestTimer(advanceAfterRest);
+        startRestTimer(restSecondsForExercise(exercises[nextEx].name), advanceAfterRest);
       }
     }
   }
@@ -275,7 +308,7 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
     // SVG circle progress for timer
     const R = 70;
     const circ = 2 * Math.PI * R;
-    const dashOffset = circ * (1 - restSecs / REST_SECONDS);
+    const dashOffset = circ * (1 - restSecs / Math.max(restTotal, 1));
 
     return (
       <div className="fixed inset-0 z-50 flex justify-center bg-black/60">
@@ -379,11 +412,19 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
       </div>
 
       {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-3 flex-shrink-0">
-        <p className="text-gray-400 text-sm font-medium">
-          Exercise <span className="text-white font-bold">{exIdx + 1}</span> / {exercises.length}
+      <div className="flex items-center justify-between px-4 py-3 flex-shrink-0 gap-2">
+        <button
+          type="button"
+          onClick={() => setShowPlan((v) => !v)}
+          className="text-xs font-semibold text-violet-400 hover:text-violet-300 px-2 py-1 rounded-lg bg-violet-900/30"
+        >
+          {showPlan ? 'Hide plan' : 'Day plan'}
+        </button>
+        <p className="text-gray-400 text-sm font-medium flex-1 text-center">
+          <span className="text-white font-bold">{exIdx + 1}</span> / {exercises.length}
         </p>
         <button
+          type="button"
           onClick={() => setConfirmQuit(true)}
           className="w-9 h-9 rounded-full bg-gray-800 hover:bg-gray-700 flex items-center justify-center
                      text-gray-400 hover:text-white transition-colors text-lg"
@@ -392,8 +433,23 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
         </button>
       </div>
 
+      {showPlan && (
+        <div className="mx-4 mb-2 rounded-xl bg-gray-900 border border-gray-700 p-3 flex flex-col gap-1.5 max-h-40 overflow-y-auto">
+          {exercises.map((e, i) => (
+            <div
+              key={e.name}
+              className={`flex items-center justify-between text-xs py-1 px-2 rounded-lg
+                ${i < exIdx ? 'text-emerald-400 bg-emerald-900/20' : i === exIdx ? 'text-violet-300 bg-violet-900/30 font-semibold' : 'text-gray-500'}`}
+            >
+              <span className="truncate pr-2">{i < exIdx ? '✓ ' : i === exIdx ? '▶ ' : ''}{e.name}</span>
+              <span className="shrink-0 text-gray-600">{e.sets} sets</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Scrollable body */}
-      <div className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 pb-4">
+      <div className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 pb-36 scroll-pb-safe">
 
         {/* Form-guide image */}
         {exStats?.imageUrl ? (
@@ -407,9 +463,11 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
             />
           </div>
         ) : (
-          <div className="rounded-2xl bg-gray-800 border border-gray-700 flex items-center justify-center flex-shrink-0"
-               style={{ height: '120px' }}>
-            <span className="text-5xl">🏋️</span>
+          <div className="rounded-2xl bg-gray-900 border border-gray-700 flex flex-col items-center justify-center flex-shrink-0 px-4 py-6 gap-1"
+               style={{ minHeight: '120px' }}>
+            <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">Form guide</span>
+            <p className="text-center text-sm font-semibold text-gray-300 leading-snug">{ex.name}</p>
+            <p className="text-[11px] text-gray-600">Add a GIF link in Exercise Library</p>
           </div>
         )}
 
@@ -465,6 +523,7 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
               inputMode="decimal"
               value={weight}
               onChange={(e) => setWeight(e.target.value)}
+              onFocus={(e) => e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })}
               placeholder="0"
               className="min-h-[80px] bg-gray-800 border-2 border-gray-600 focus:border-violet-500
                          rounded-2xl text-white text-3xl font-black text-center
@@ -480,6 +539,7 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
               inputMode="numeric"
               value={reps}
               onChange={(e) => setReps(e.target.value)}
+              onFocus={(e) => e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })}
               placeholder="0"
               className="min-h-[80px] bg-gray-800 border-2 border-gray-600 focus:border-violet-500
                          rounded-2xl text-white text-3xl font-black text-center
@@ -512,8 +572,15 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
         </div>
       </div>
 
-      {/* SAVE SET + Quit — sticky bottom */}
-      <div className="flex-shrink-0 px-4 pb-6 pt-2 bg-gray-950 border-t border-gray-800 flex flex-col gap-2">
+      {/* SAVE SET + Skip + Quit — sticky bottom */}
+      <div className="flex-shrink-0 px-4 pb-6 pt-2 bg-gray-950 border-t border-gray-800 flex flex-col gap-2"
+           style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
+        <p className="text-[10px] text-center text-gray-600">
+          Rest after save: {restSecondsForExercise(ex.name)}s
+          {setIdx >= ex.sets && exIdx + 1 < exercises.length && (
+            <> → next: {restSecondsForExercise(exercises[exIdx + 1].name)}s</>
+          )}
+        </p>
         <button
           onClick={handleSaveSet}
           disabled={saving}
@@ -524,6 +591,14 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
                      transition-colors duration-150"
         >
           {saving ? '⏳ Saving...' : 'SAVE SET ▶'}
+        </button>
+        <button
+          type="button"
+          onClick={skipExercise}
+          className="w-full min-h-[44px] bg-gray-800 hover:bg-gray-700 border border-gray-600
+                     text-gray-300 font-semibold text-sm rounded-2xl transition-colors"
+        >
+          Skip exercise →
         </button>
         <button
           onClick={() => setConfirmQuit(true)}

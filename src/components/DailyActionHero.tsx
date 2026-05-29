@@ -25,6 +25,7 @@ interface DailyStatus {
 
 interface DailyActionHeroProps {
   onNavigate: (tab: Tab) => void;
+  refreshToken?: number;
 }
 
 function greeting(): string {
@@ -106,7 +107,7 @@ const TASK_LABELS: Record<string, { label: string; icon: string }> = {
   steps:   { label: 'Steps',   icon: '👟' },
 };
 
-export default function DailyActionHero({ onNavigate }: DailyActionHeroProps) {
+export default function DailyActionHero({ onNavigate, refreshToken = 0 }: DailyActionHeroProps) {
   const [status, setStatus]   = useState<DailyStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -116,7 +117,7 @@ export default function DailyActionHero({ onNavigate }: DailyActionHeroProps) {
       .then((d) => setStatus(d as DailyStatus))
       .catch(() => setStatus(null))
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshToken]);
 
   if (loading) {
     return (

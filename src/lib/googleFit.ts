@@ -69,6 +69,7 @@ export async function fetchDailyMetrics(
         dataTypeName: 'com.google.step_count.delta',
         dataSourceId: 'derived:com.google.step_count.delta:com.google.android.gms:merge_step_deltas',
       },
+      // Activity calories since midnight (steps, NEAT, watch HR estimates) — NOT gym sessions only.
       {
         dataTypeName: 'com.google.calories.expended',
         dataSourceId: 'derived:com.google.calories.expended:com.google.android.gms:merge_calories_expended',
