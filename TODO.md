@@ -53,6 +53,7 @@ See [SPECS.md](./SPECS.md) for architecture.
 - [x] MED warning (Logger + Player); warmup sets în Player
 - [x] `WorkoutPlayerProvider` (fără props drilling Dashboard → Logger)
 - [x] Teste: `logValidation`, `workoutSafety`, `missingBlock2Swaps`
+- [x] Paginare UI Exercise Library (`limit`/`offset` + filtru categorie)
 
 ---
 

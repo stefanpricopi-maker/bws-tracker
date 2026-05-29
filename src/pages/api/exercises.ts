@@ -3,7 +3,9 @@ import { requireUser } from '../../lib/apiAuth';
 import { validateExerciseImageUrl } from '../../lib/urlValidation';
 import { db } from '../../db';
 import { exercises } from '../../db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and, type SQL } from 'drizzle-orm';
+
+const VALID_CATEGORIES = ['Push', 'Pull', 'Legs', 'Upper', 'Full Body'] as const;
 
 const DEFAULT_EXERCISES: Array<{ name: string; targetMuscle: string; category: string }> = [
   { name: 'Dumbbell Floor Press',        targetMuscle: 'Chest',       category: 'Push' },
@@ -39,7 +41,7 @@ async function ensureSeeded() {
   }
 }
 
-// ── GET /api/exercises?limit=100&offset=0 ────────────────────────────────────
+// ── GET /api/exercises?limit=20&offset=0&category=Push ───────────────────────
 export const GET: APIRoute = async ({ request, url }) => {
   const auth = await requireUser(request);
   if (auth instanceof Response) return auth;
@@ -48,11 +50,17 @@ export const GET: APIRoute = async ({ request, url }) => {
     await ensureSeeded();
     const limit  = Math.min(Math.max(1, Number(url.searchParams.get('limit')) || 200), 500);
     const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
+    const categoryParam = url.searchParams.get('category')?.trim() ?? '';
+    const categoryOk = VALID_CATEGORIES.includes(categoryParam as (typeof VALID_CATEGORIES)[number]);
+
+    const where: SQL = categoryOk
+      ? and(eq(exercises.isArchived, false), eq(exercises.category, categoryParam))!
+      : eq(exercises.isArchived, false);
 
     const rows = await db
       .select()
       .from(exercises)
-      .where(eq(exercises.isArchived, false))
+      .where(where)
       .orderBy(exercises.category, exercises.name)
       .limit(limit)
       .offset(offset);
@@ -60,13 +68,14 @@ export const GET: APIRoute = async ({ request, url }) => {
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)` })
       .from(exercises)
-      .where(eq(exercises.isArchived, false));
+      .where(where);
 
     return new Response(JSON.stringify({
       exercises: rows,
       total: Number(count),
       limit,
       offset,
+      ...(categoryOk ? { category: categoryParam } : {}),
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -104,10 +113,9 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    const validCategories = ['Push', 'Pull', 'Legs', 'Upper', 'Full Body'];
-    if (!validCategories.includes(category)) {
+    if (!VALID_CATEGORIES.includes(category as (typeof VALID_CATEGORIES)[number])) {
       return new Response(
-        JSON.stringify({ error: `category must be one of: ${validCategories.join(', ')}` }),
+        JSON.stringify({ error: `category must be one of: ${VALID_CATEGORIES.join(', ')}` }),
         { status: 400, headers: { 'Content-Type': 'application/json' } },
       );
     }
