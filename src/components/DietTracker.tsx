@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { resolveDietTargets } from '../lib/macroTargets';
 import MealIntakeSection from './MealIntakeSection';
+import MealFoodPreferences from './MealFoodPreferences';
+import {
+  canGenerateMealPlan,
+  defaultAllowedFoodIds,
+  MIN_ALLOWED_FOODS,
+} from '../lib/mealPreferences';
 import {
   MEAL_SLOTS,
   MEAL_LABELS,
@@ -226,6 +232,9 @@ export default function DietTracker() {
   const [solveError, setSolveError] = useState<string | null>(null);
   const [logging, setLogging]       = useState(false);
   const [logStatus, setLogStatus]   = useState<'idle' | 'ok' | 'err'>('idle');
+  const [allowedFoodIds, setAllowedFoodIds] = useState(defaultAllowedFoodIds);
+  const [prefSaving, setPrefSaving]         = useState(false);
+  const [prefSaveStatus, setPrefSaveStatus] = useState<'idle' | 'ok' | 'err'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handleWearableSync = useCallback((data: WearableSyncResult) => setWearableSync(data), []);
 
@@ -253,12 +262,38 @@ export default function DietTracker() {
     return totals;
   }
 
+  async function saveMealPreferences(): Promise<boolean> {
+    setPrefSaving(true);
+    setPrefSaveStatus('idle');
+    try {
+      const res = await fetch('/api/profile', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ mealPreferencesAllowed: allowedFoodIds }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      setPrefSaveStatus('ok');
+      return true;
+    } catch {
+      setPrefSaveStatus('err');
+      return false;
+    } finally {
+      setPrefSaving(false);
+    }
+  }
+
   async function handleSolveMacros() {
+    if (!canGenerateMealPlan(allowedFoodIds)) {
+      setSolveError(`Selectează cel puțin ${MIN_ALLOWED_FOODS} alimente în lista de mai jos.`);
+      return;
+    }
     setSolving(true);
     setSolveError(null);
     setMealPlan(null);
     setLogStatus('idle');
     try {
+      const saved = await saveMealPreferences();
+      if (!saved) throw new Error('Nu am putut salva preferințele.');
       const res  = await fetch('/api/macro-solver');
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error ?? 'Unknown error');
@@ -308,7 +343,13 @@ export default function DietTracker() {
       fetch('/api/logs?days=30').then((r) => r.json()),
     ])
       .then(([profile, rows]: [
-        { goals?: { targetCaloriesKcal?: number | null; targetProteinG?: number | null; targetCarbsG?: number | null; targetFatG?: number | null } | null },
+        { goals?: {
+          targetCaloriesKcal?: number | null;
+          targetProteinG?: number | null;
+          targetCarbsG?: number | null;
+          targetFatG?: number | null;
+          mealPreferencesAllowed?: string[];
+        } | null },
         Array<{
           date: string;
           weight_kg?: number | null;
@@ -323,6 +364,9 @@ export default function DietTracker() {
         const latestWeight = weightLogs.length > 0 ? weightLogs[0].weight_kg! : null;
         const t = resolveDietTargets(profile.goals ?? null, latestWeight);
         setTargets({ calories: t.calories, protein: t.protein, carbs: t.carbs, fat: t.fat });
+        if (profile.goals?.mealPreferencesAllowed?.length) {
+          setAllowedFoodIds(profile.goals.mealPreferencesAllowed);
+        }
         if (latestWeight) {
           setTargetsHint(`Protein target: ${t.protein}g (${latestWeight} kg × 1.8 g/kg). Edit in Profile.`);
         } else {
@@ -423,35 +467,46 @@ export default function DietTracker() {
     <div className="flex flex-col gap-6">
 
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-bold text-white">Nutrition</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Daily targets & intake</p>
-          {targetsHint && (
-            <p className="text-[10px] text-violet-400/80 mt-1 max-w-[240px] leading-snug">{targetsHint}</p>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={handleSolveMacros}
-          disabled={solving}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold
-                     bg-emerald-600/20 border border-emerald-500/40 text-emerald-300
-                     hover:bg-emerald-600/30 active:bg-emerald-600/40
-                     disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
-        >
-          {solving ? (
-            <>
-              <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10"/>
-              </svg>
-              Solving…
-            </>
-          ) : (
-            <>🧮 Solve Macros</>
-          )}
-        </button>
+      <div>
+        <h2 className="text-lg font-bold text-white">Nutrition</h2>
+        <p className="text-xs text-gray-500 mt-0.5">Daily targets & intake</p>
+        {targetsHint && (
+          <p className="text-[10px] text-violet-400/80 mt-1 max-w-[280px] leading-snug">{targetsHint}</p>
+        )}
       </div>
+
+      <MealFoodPreferences
+        allowedIds={allowedFoodIds}
+        onChange={(ids) => {
+          setAllowedFoodIds(ids);
+          setPrefSaveStatus('idle');
+        }}
+        onSave={saveMealPreferences}
+        saving={prefSaving}
+        saveStatus={prefSaveStatus}
+      />
+
+      <button
+        type="button"
+        onClick={handleSolveMacros}
+        disabled={solving || !canGenerateMealPlan(allowedFoodIds)}
+        className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold
+                   bg-emerald-600/25 border border-emerald-500/50 text-emerald-200
+                   hover:bg-emerald-600/35 active:bg-emerald-600/45
+                   disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        data-testid="generate-meal-plan"
+      >
+        {solving ? (
+          <>
+            <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10"/>
+            </svg>
+            Generez planul…
+          </>
+        ) : (
+          <>🧮 Generează plan AI</>
+        )}
+      </button>
 
       {/* Calorie ring-style hero */}
       <div
@@ -539,7 +594,6 @@ export default function DietTracker() {
         )}
       </div>
 
-      {/* ── Macro-Solver error ─────────────────────────────────────── */}
       {solveError && (
         <div className="rounded-xl px-4 py-3 bg-red-900/40 border border-red-500/40">
           <p className="text-xs font-semibold text-red-400">⚠ Macro solver error</p>
