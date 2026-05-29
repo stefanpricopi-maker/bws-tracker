@@ -60,13 +60,15 @@ test.describe('Daily Log — Diet entry', () => {
   test('shows meal sections', async ({ page }) => {
     await expect(page.getByTestId('meal-section-breakfast')).toBeVisible();
     await expect(page.getByTestId('meal-section-lunch')).toBeVisible();
+    await expect(page.getByTestId('meal-section-snacks')).toBeVisible();
     await expect(page.getByTestId('meal-section-dinner')).toBeVisible();
   });
 
   test('can fill and submit diet data per meal', async ({ page }) => {
     await page.getByTestId('meal-breakfast-calories').fill('500');
-    await page.getByTestId('meal-lunch-calories').fill('650');
-    await page.getByTestId('meal-dinner-calories').fill('600');
+    await page.getByTestId('meal-lunch-calories').fill('500');
+    await page.getByTestId('meal-snacks-calories').fill('400');
+    await page.getByTestId('meal-dinner-calories').fill('450');
 
     await page.getByRole('button', { name: /salvează ziua/i }).click();
 

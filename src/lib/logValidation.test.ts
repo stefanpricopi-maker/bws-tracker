@@ -26,6 +26,7 @@ describe('validateLogPatch', () => {
       meals: {
         breakfast: { calories: 400, protein: 30, carbs: 40, fat: 10 },
         lunch:     { calories: 600, protein: 40, carbs: 50, fat: 15 },
+        snacks:    { calories: 0, protein: 0, carbs: 0, fat: 0 },
         dinner:    { calories: 0, protein: 0, carbs: 0, fat: 0 },
       },
     });

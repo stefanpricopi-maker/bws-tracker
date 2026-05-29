@@ -13,14 +13,15 @@ describe('mealIntake', () => {
     const stored = storedMealsFromForm({
       ...EMPTY_DAY_MEALS,
       breakfast: { calories: '400', protein: '30', carbs: '40', fat: '10' },
-      lunch:     { calories: '600', protein: '40', carbs: '50', fat: '15' },
-      dinner:    { calories: '500', protein: '35', carbs: '45', fat: '12' },
+      lunch:     { calories: '500', protein: '35', carbs: '45', fat: '12' },
+      snacks:    { calories: '350', protein: '15', carbs: '30', fat: '12' },
+      dinner:    { calories: '450', protein: '35', carbs: '40', fat: '10' },
     });
     expect(sumDayMeals(stored)).toEqual({
-      calories: 1500,
-      protein: 105,
-      carbs: 135,
-      fat: 37,
+      calories: 1700,
+      protein: 115,
+      carbs: 155,
+      fat: 44,
     });
   });
 
@@ -42,6 +43,8 @@ describe('mealIntake', () => {
   it('maps AI meal names to slots', () => {
     expect(mealSlotFromPlanName('Breakfast')).toBe('breakfast');
     expect(mealSlotFromPlanName('Prânz')).toBe('lunch');
+    expect(mealSlotFromPlanName('Gustări')).toBe('snacks');
+    expect(mealSlotFromPlanName('Snacks')).toBe('snacks');
     expect(mealSlotFromPlanName('Dinner')).toBe('dinner');
   });
 });

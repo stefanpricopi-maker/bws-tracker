@@ -55,6 +55,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const MEAL_ICONS: Record<MealSlot, string> = {
   breakfast: '🌅',
   lunch:     '☀️',
+  snacks:    '🍫',
   dinner:    '🌙',
 };
 

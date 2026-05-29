@@ -35,7 +35,8 @@ function buildPrompt(targets: {
   return `You are a strict nutrition calculator. The user needs exactly:
 ${targets.calories} kcal, ${targets.protein}g Protein, ${targets.fat}g Fat, ${targets.carbs}g Carbs.
 
-Generate a 3-meal plan for today (Breakfast, Lunch, Dinner) that hits these macros exactly (+/- 5% margin of error).
+Generate a 4-meal plan for today (Breakfast, Lunch, Snacks between lunch and dinner, Dinner) that hits these macros exactly (+/- 5% margin of error).
+Snacks may include protein bars, nuts, fruit, yogurt — allocate a realistic share of daily calories there when it helps hit targets.
 Use only common whole foods: chicken breast, rice, eggs, whey protein powder, oats, sweet potato, broccoli, spinach, olive oil, Greek yogurt, cottage cheese, tuna.
 Weigh every ingredient to the nearest 5g. Be precise — this is a mathematical nutrition plan, not a recipe suggestion.
 

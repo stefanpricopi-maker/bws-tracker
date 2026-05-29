@@ -72,7 +72,7 @@ function toClientRow(r: typeof dailyLogs.$inferSelect) {
 
 // ── POST /api/logs ─────────────────────────────────────────────────────────
 // Body (all fields optional except date):
-//   { date, weight_kg, steps, calories_in, protein_g, carbs_g, fat_g, meals: { breakfast, lunch, dinner } }
+//   { date, weight_kg, steps, calories_in, protein_g, carbs_g, fat_g, meals: { breakfast, lunch, snacks, dinner } }
 export const POST: APIRoute = async ({ request }) => {
   const auth = await requireUser(request);
   if (auth instanceof Response) return auth;
