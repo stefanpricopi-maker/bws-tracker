@@ -36,7 +36,9 @@ npm install
 npm run dev          # http://localhost:4321
 ```
 
-Requires a `.env` file — copy the structure from `.env.example` (or see `SPECS.md`).
+Requires a `.env` file — copy the structure from `.env.example`.
+
+**Docs:** [SPECS.md](./SPECS.md) (architecture & formulas) · [TODO.md](./TODO.md) (backlog)
 
 ## Docker
 
