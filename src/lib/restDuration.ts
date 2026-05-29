@@ -1,4 +1,7 @@
+import { isBandedExercise } from './exerciseKind';
+
 export function isIsolationExercise(exerciseName: string): boolean {
+  if (isBandedExercise(exerciseName)) return true;
   const n = exerciseName.toLowerCase();
   return (
     n.includes('curl') ||

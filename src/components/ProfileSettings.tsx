@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { clearOnboarding } from './Onboarding';
+import { proteinGramsForWeight, macrosFromCaloriesAndProtein } from '../lib/macroTargets';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -156,6 +157,12 @@ export default function ProfileSettings({ onReplayOnboarding }: ProfileSettingsP
     const loss = parseFloat(weeklyLoss) || 0.5;
     const targetCal = Math.max(1200, tdee - Math.round((loss * 1000) / 7));
     setTargetCalories(String(targetCal));
+
+    const proteinG = proteinGramsForWeight(w);
+    setTargetProtein(String(proteinG));
+    const { carbsG, fatG } = macrosFromCaloriesAndProtein(targetCal, proteinG);
+    setTargetCarbs(String(carbsG));
+    setTargetFat(String(fatG));
   }
 
   async function handleSave() {

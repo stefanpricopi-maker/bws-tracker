@@ -7,6 +7,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { autoRegulate as autoRegulateCalc, calcDeloadWeight } from '../lib/fitness';
 import { restSecondsForExercise } from '../lib/restDuration';
+import { isBandedExercise, formatBandLevel } from '../lib/exerciseKind';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -100,7 +101,7 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
         let targetWeight: number | null = null;
         let targetReps:   number | null = null;
         if (needsDeload && r.maxWeight != null) {
-          targetWeight = calcDeloadWeight(r.maxWeight);
+          targetWeight = calcDeloadWeight(r.maxWeight, isBandedExercise(ex.name));
           targetReps   = 10;
         } else {
           ({ targetWeight, targetReps } = autoRegulateCalc(
@@ -506,7 +507,7 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
           {exStats?.needsDeload && (
             <div className="flex items-center gap-2 rounded-xl bg-amber-900/40 border border-amber-500/40 px-3 py-2">
               <span className="text-sm">⚠️</span>
-              <p className="text-xs text-amber-300 font-semibold">CNS Fatigue — Deload −20%</p>
+              <p className="text-xs text-amber-300 font-semibold">CNS Fatigue — Deload (~12% lighter)</p>
             </div>
           )}
           <div className="flex gap-3">
@@ -515,7 +516,11 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
                 {exStats?.needsDeload ? '🔻 Deload Target' : '🎯 Target'}
               </p>
               <p className="text-white font-bold text-base">
-                {exStats?.targetWeight != null ? `${exStats.targetWeight} kg` : '—'}
+                {exStats?.targetWeight != null
+                  ? (isBandedExercise(ex.name)
+                    ? formatBandLevel(exStats.targetWeight)
+                    : `${exStats.targetWeight} kg`)
+                  : '—'}
               </p>
               <p className="text-gray-400 text-xs">
                 × {exStats?.targetReps != null ? `${exStats.targetReps} reps` : '—'}
@@ -525,7 +530,11 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
             <div className="flex-1 text-center">
               <p className="text-xs text-gray-500 mb-1">📊 Previous</p>
               <p className="text-gray-300 font-semibold text-base">
-                {exStats?.lastWeight != null ? `${exStats.lastWeight} kg` : '—'}
+                {exStats?.lastWeight != null
+                  ? (isBandedExercise(ex.name)
+                    ? formatBandLevel(exStats.lastWeight)
+                    : `${exStats.lastWeight} kg`)
+                  : '—'}
               </p>
               <p className="text-gray-500 text-xs">
                 × {exStats?.lastReps != null ? `${exStats.lastReps} reps` : '—'}
@@ -538,19 +547,33 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-2">
             <label className="text-center text-xs font-semibold text-gray-400 uppercase tracking-widest">
-              Weight (kg)
+              {isBandedExercise(ex.name) ? 'Band level' : 'Weight (kg)'}
             </label>
-            <input
-              type="number"
-              inputMode="decimal"
-              value={weight}
-              onChange={(e) => setWeight(e.target.value)}
-              onFocus={(e) => e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })}
-              placeholder="0"
-              className="min-h-[80px] bg-gray-800 border-2 border-gray-600 focus:border-violet-500
-                         rounded-2xl text-white text-3xl font-black text-center
-                         placeholder-gray-700 focus:outline-none transition-colors"
-            />
+            {isBandedExercise(ex.name) ? (
+              <select
+                value={weight}
+                onChange={(e) => setWeight(e.target.value)}
+                className="min-h-[80px] bg-gray-800 border-2 border-gray-600 focus:border-violet-500
+                           rounded-2xl text-white text-xl font-bold text-center focus:outline-none"
+              >
+                <option value="">—</option>
+                <option value="1">Light</option>
+                <option value="2">Medium</option>
+                <option value="3">Heavy</option>
+              </select>
+            ) : (
+              <input
+                type="number"
+                inputMode="decimal"
+                value={weight}
+                onChange={(e) => setWeight(e.target.value)}
+                onFocus={(e) => e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })}
+                placeholder="0"
+                className="min-h-[80px] bg-gray-800 border-2 border-gray-600 focus:border-violet-500
+                           rounded-2xl text-white text-3xl font-black text-center
+                           placeholder-gray-700 focus:outline-none transition-colors"
+              />
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <label className="text-center text-xs font-semibold text-gray-400 uppercase tracking-widest">

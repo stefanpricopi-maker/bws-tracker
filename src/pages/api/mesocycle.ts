@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { db } from '../../db';
 import { mesocycles, users } from '../../db/schema';
 import { eq } from 'drizzle-orm';
-import { isMesocycleComplete, nextBlock, weeksElapsed, MESOCYCLE_WEEKS } from '../../lib/periodization';
+import { isMesocycleComplete, isDeloadWeek, nextBlock, weeksElapsed, MESOCYCLE_WEEKS } from '../../lib/periodization';
 
 const USER_ID = 1;
 
@@ -19,6 +19,8 @@ export const GET: APIRoute = async () => {
       weeksElapsed:      weeks,
       weeksRemaining:    Math.max(MESOCYCLE_WEEKS - weeks, 0),
       mesocycleComplete: complete,
+      isDeloadWeek:      isDeloadWeek(weeks),
+      displayWeek:       Math.min(weeks + 1, MESOCYCLE_WEEKS),
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (err) {
     return new Response(JSON.stringify({ error: String(err) }), {

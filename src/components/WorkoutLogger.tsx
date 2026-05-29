@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { autoRegulate as autoRegulateCalc, calcDeloadWeight, weightIncrementKg } from '../lib/fitness';
 import { getExerciseForBlock, EXERCISE_SWAP, MESOCYCLE_WEEKS } from '../lib/periodization';
+import { isBandedExercise } from '../lib/exerciseKind';
 import type { PlannedExercise } from './WorkoutPlayer';
 import ExerciseManager from './ExerciseManager';
 
@@ -226,6 +227,8 @@ interface MesocycleStatus {
   weeksElapsed:      number;
   weeksRemaining:    number;
   mesocycleComplete: boolean;
+  isDeloadWeek?:     boolean;
+  displayWeek?:      number;
 }
 
 interface WorkoutLoggerProps {
@@ -332,8 +335,9 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
           let targetWeight: number | null = null;
           let targetReps:   number | null = null;
           let isWeightIncrease = false;
+          const banded = isBandedExercise(ex.name);
           if (needsDeload && r.maxWeight != null) {
-            targetWeight = calcDeloadWeight(r.maxWeight);
+            targetWeight = calcDeloadWeight(r.maxWeight, banded);
             targetReps   = 10;
           } else {
             ({ targetWeight, targetReps, isWeightIncrease } = autoRegulate(
@@ -356,7 +360,7 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
     }
   }
 
-  const fetchPrevStats = useCallback(async (day: DayConfig, isMed: boolean) => {
+  const fetchPrevStats = useCallback(async (day: DayConfig, isMed: boolean, forceDeloadWeek = false) => {
     if (day.isRest) return;
     setLoadingPrev(true);
     const exerciseNames = isMed && day.medExercise
@@ -373,15 +377,15 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
       setExercises((prev) =>
         prev.map((ex, i) => {
           const r = results[i] ?? {};
-          const needsDeload = r.needs_deload === true;
+          const needsDeload = r.needs_deload === true || forceDeloadWeek;
+          const banded = isBandedExercise(ex.name);
 
           let targetWeight: number | null;
           let targetReps:   number | null;
           let isWeightIncrease = false;
 
           if (needsDeload && r.maxWeight != null) {
-            // Phase 16: CNS fatigue — drop 20%, round to nearest 2.5 kg, target 10 reps
-            targetWeight     = calcDeloadWeight(r.maxWeight);
+            targetWeight     = calcDeloadWeight(r.maxWeight, banded);
             targetReps       = 10;
             isWeightIncrease = false;
           } else {
@@ -434,8 +438,8 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
     const block = meso?.currentBlock ?? 1;
     const fresh = buildExerciseLogsForBlock(day, medMode, block);
     setExercises(fresh);
-    fetchPrevStats(day, medMode);
-  }, [selectedDay, medMode, fetchPrevStats, meso?.currentBlock]);
+    fetchPrevStats(day, medMode, meso?.isDeloadWeek ?? false);
+  }, [selectedDay, medMode, fetchPrevStats, meso?.currentBlock, meso?.isDeloadWeek]);
 
   function handleSetChange(
     exIdx: number,
@@ -647,10 +651,20 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
       )}
 
       {/* Mesocycle progress indicator (subtle) */}
+      {meso?.isDeloadWeek && (
+        <div className="rounded-2xl bg-blue-900/30 border border-blue-500/40 px-4 py-3">
+          <p className="text-sm font-bold text-blue-200">🔄 Deload week (week {meso.displayWeek ?? 8})</p>
+          <p className="text-xs text-blue-300/80 mt-1 leading-relaxed">
+            Planned recovery: ~12% lighter loads, focus on form. Targets are pre-adjusted below.
+          </p>
+        </div>
+      )}
+
       {meso && !meso.mesocycleComplete && (
         <div className="flex items-center gap-2 px-1">
           <span className="text-xs text-gray-500">
-            Block {meso.currentBlock} · Week {meso.weeksElapsed + 1}/{MESOCYCLE_WEEKS}
+            Block {meso.currentBlock} · Week {meso.displayWeek ?? meso.weeksElapsed + 1}/{MESOCYCLE_WEEKS}
+            {meso.isDeloadWeek ? ' · Deload' : ''}
           </span>
           <div className="flex-1 h-1 rounded-full bg-gray-800 overflow-hidden">
             <div
@@ -948,7 +962,7 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                     ⚠️ CNS Fatigue Detected
                   </p>
                   <p className="text-[11px] text-amber-200/80 leading-relaxed">
-                    Stagnation over 3 sessions. Auto-Deload initiated (−20% weight).
+                    Stagnation over 3 recent sessions. Auto-deload (~12% lighter).
                     Focus strictly on <span className="font-semibold text-amber-300">form</span> and{' '}
                     <span className="font-semibold text-amber-300">explosive concentric movement</span> today.
                   </p>
@@ -979,7 +993,7 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                   {/* Phase 16: deload badge (replaces Phase 12 weight-increase badge) */}
                   {ex.needsDeload && !medMode && (
                     <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                      🔻 Deload −20%
+                      🔻 Deload
                     </span>
                   )}
                   {/* Phase 12: weight-increase indicator (only when no deload) */}
@@ -1014,7 +1028,9 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                 {/* Column headers */}
                 <div className="grid grid-cols-[40px_1fr_1fr] gap-2 items-center">
                   <span className="text-xs text-gray-500 text-center">Set</span>
-                  <span className="text-xs text-gray-500 text-center">Weight (kg)</span>
+                  <span className="text-xs text-gray-500 text-center">
+                    {isBandedExercise(ex.name) ? 'Band' : 'Weight (kg)'}
+                  </span>
                   <span className="text-xs text-gray-500 text-center">Reps</span>
                 </div>
 
@@ -1022,6 +1038,7 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                   const isMiniSet = s.setLabel.startsWith('M');
                   const isActivation = s.setLabel === 'ACT';
                   const setFilled = s.weight.trim() !== '' && s.reps.trim() !== '';
+                  const banded = isBandedExercise(ex.name);
                   return (
                     <div key={si}>
                       {/* 10s rest hint before mini-sets */}
@@ -1036,22 +1053,35 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                           ${isActivation ? 'text-amber-400' : isMiniSet ? 'text-violet-400' : 'text-gray-400'}`}>
                           {s.setLabel}
                         </span>
-                        <input
-                          ref={setInputRef(`${exIdx}-${si}-w`)}
-                          type="number"
-                          inputMode="decimal"
-                          placeholder={isActivation ? 'heavy' : '0'}
-                          value={s.weight}
-                          onChange={(e) => handleSetChange(exIdx, si, 'weight', e.target.value)}
-                          onKeyDown={(e) => handleWeightKey(exIdx, si, e)}
-                          className={`min-h-[44px] bg-gray-900 rounded-xl text-white text-sm text-center placeholder-gray-600 focus:outline-none transition-colors w-full
-                            ${isActivation
-                              ? 'border border-amber-500/50 focus:border-amber-400'
-                              : isMiniSet
-                                ? 'border border-violet-700/50 focus:border-violet-500'
-                                : 'border border-gray-700 focus:border-violet-500'
-                            }`}
-                        />
+                        {banded ? (
+                          <select
+                            value={s.weight}
+                            onChange={(e) => handleSetChange(exIdx, si, 'weight', e.target.value)}
+                            className="min-h-[44px] bg-gray-900 rounded-xl text-white text-sm text-center border border-gray-700 focus:border-violet-500 focus:outline-none w-full"
+                          >
+                            <option value="">—</option>
+                            <option value="1">Light</option>
+                            <option value="2">Medium</option>
+                            <option value="3">Heavy</option>
+                          </select>
+                        ) : (
+                          <input
+                            ref={setInputRef(`${exIdx}-${si}-w`)}
+                            type="number"
+                            inputMode="decimal"
+                            placeholder={isActivation ? 'heavy' : '0'}
+                            value={s.weight}
+                            onChange={(e) => handleSetChange(exIdx, si, 'weight', e.target.value)}
+                            onKeyDown={(e) => handleWeightKey(exIdx, si, e)}
+                            className={`min-h-[44px] bg-gray-900 rounded-xl text-white text-sm text-center placeholder-gray-600 focus:outline-none transition-colors w-full
+                              ${isActivation
+                                ? 'border border-amber-500/50 focus:border-amber-400'
+                                : isMiniSet
+                                  ? 'border border-violet-700/50 focus:border-violet-500'
+                                  : 'border border-gray-700 focus:border-violet-500'
+                              }`}
+                          />
+                        )}
                         <input
                           ref={setInputRef(`${exIdx}-${si}-r`)}
                           type="number"

@@ -51,7 +51,7 @@ export const GET: APIRoute = async ({ url }) => {
         if (s.weight === acc.weight && s.reps > acc.reps) return s;
         return acc;
       }, sets[0]);
-      return { maxWeight: best.weight, maxReps: best.reps, date: session.date };
+      return { maxWeight: best.weight, maxReps: best.reps, date: session.date as string };
     }),
   );
 

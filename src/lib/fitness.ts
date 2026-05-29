@@ -3,6 +3,7 @@
 // Used by API routes and React components; tested independently via Vitest.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { isBandedExercise } from './exerciseKind';
 import { isIsolationExercise } from './restDuration';
 
 // ── Primitives ────────────────────────────────────────────────────────────────
@@ -71,11 +72,35 @@ export function roundTo2_5(weight: number): number {
   return Math.round(weight / 2.5) * 2.5;
 }
 
+/** ~12.5% load reduction (between 10–15% BWS deload range). */
+export const DELOAD_LOAD_FACTOR = 0.875;
+
+/** Only sessions within this window count toward CNS stagnation. */
+export const CNS_LOOKBACK_DAYS = 56;
+
+export interface SessionBestWithDate extends SessionBest {
+  date?: string;
+}
+
 /**
- * Returns the deload weight: 80% of maxWeight, rounded to nearest 2.5 kg.
+ * Returns the deload weight: ~12.5% off max, rounded to nearest 2.5 kg (dumbbells).
  */
-export function calcDeloadWeight(maxWeight: number): number {
-  return roundTo2_5(maxWeight * 0.8);
+export function calcDeloadWeight(maxWeight: number, banded = false): number {
+  if (banded) {
+    return Math.max(1, Math.round(maxWeight) - 1);
+  }
+  return roundTo2_5(maxWeight * DELOAD_LOAD_FACTOR);
+}
+
+/** Keep only sessions from the last `maxDays` (default 56). */
+export function filterRecentSessions<T extends { date?: string }>(
+  sessions: T[],
+  maxDays = CNS_LOOKBACK_DAYS,
+): T[] {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - maxDays);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  return sessions.filter((s) => !s.date || s.date >= cutoffStr);
 }
 
 /**
@@ -88,9 +113,13 @@ export function calcDeloadWeight(maxWeight: number): number {
  *
  * Requires exactly 3 sessions to make a meaningful judgement.
  */
-export function detectDeload(sessions: SessionBest[]): boolean {
-  if (sessions.length < 3) return false;
-  const [s0, s1, s2] = sessions; // oldest → newest
+export function detectDeload(sessions: SessionBest[], maxDays = CNS_LOOKBACK_DAYS): boolean {
+  const recent = filterRecentSessions(
+    sessions.map((s, i) => ({ ...s, date: (s as SessionBestWithDate).date })),
+    maxDays,
+  );
+  if (recent.length < 3) return false;
+  const [s0, s1, s2] = recent.slice(-3); // oldest → newest of last 3 recent
   const weightStagnant = s1.maxWeight <= s0.maxWeight && s2.maxWeight <= s1.maxWeight;
   const repsStagnant   = s1.maxReps   <= s0.maxReps   && s2.maxReps   <= s1.maxReps;
   return weightStagnant && repsStagnant;
@@ -116,6 +145,17 @@ export function autoRegulate(
 ): AutoRegulateResult {
   if (maxWeight === null || maxReps === null) {
     return { targetWeight: null, targetReps: null, isWeightIncrease: false };
+  }
+  if (exerciseName && isBandedExercise(exerciseName)) {
+    const level = Math.round(maxWeight);
+    if (maxReps >= 10 && level < 3) {
+      return { targetWeight: level + 1, targetReps: 8, isWeightIncrease: true };
+    }
+    return {
+      targetWeight: level,
+      targetReps:   maxReps + 1,
+      isWeightIncrease: false,
+    };
   }
   if (maxReps >= 10) {
     const inc = weightIncrementKg(exerciseName);

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { resolveDietTargets } from '../lib/macroTargets';
 
 // ── Macro-Solver types ──────────────────────────────────────────────────────
 interface MealIngredient {
@@ -19,13 +20,12 @@ interface MealPlan {
   daily_totals: { calories: number; protein: number; carbs: number; fat: number };
 }
 
-// ── Targets ────────────────────────────────────────────────────────────────
-const TARGETS = {
+const DEFAULT_TARGETS = {
   calories: 1850,
   protein:  180,
   fat:       75,
   carbs:    113,
-} as const;
+};
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function clamp(v: number, min = 0, max = 100) {
@@ -191,6 +191,8 @@ export default function DietTracker() {
   const [scanStatus, setScanStatus] = useState<'idle' | 'ok' | 'err'>('idle');
   const [preview, setPreview]     = useState<string | null>(null);
   const [wearableSync, setWearableSync] = useState<WearableSyncResult | null>(null);
+  const [targets, setTargets]         = useState(DEFAULT_TARGETS);
+  const [targetsHint, setTargetsHint] = useState('');
   // Macro-Solver state
   const [solving, setSolving]       = useState(false);
   const [mealPlan, setMealPlan]     = useState<MealPlan | null>(null);
@@ -278,11 +280,26 @@ export default function DietTracker() {
     }
   }
 
-  // Load today's data on mount
+  // Load targets + today's log on mount
   useEffect(() => {
-    fetch('/api/logs?days=1')
-      .then((r) => r.json())
-      .then((rows: Array<{ date: string; caloriesIn: number | null; proteinG: number | null; carbsG: number | null; fatG: number | null }>) => {
+    Promise.all([
+      fetch('/api/profile').then((r) => r.json()),
+      fetch('/api/logs?days=30').then((r) => r.json()),
+    ])
+      .then(([profile, rows]: [
+        { goals?: { targetCaloriesKcal?: number | null; targetProteinG?: number | null; targetCarbsG?: number | null; targetFatG?: number | null } | null },
+        Array<{ date: string; weight_kg?: number | null; caloriesIn: number | null; proteinG: number | null; carbsG: number | null; fatG: number | null }>,
+      ]) => {
+        const weightLogs = rows.filter((r) => r.weight_kg != null);
+        const latestWeight = weightLogs.length > 0 ? weightLogs[0].weight_kg! : null;
+        const t = resolveDietTargets(profile.goals ?? null, latestWeight);
+        setTargets({ calories: t.calories, protein: t.protein, carbs: t.carbs, fat: t.fat });
+        if (latestWeight) {
+          setTargetsHint(`Protein target: ${t.protein}g (${latestWeight} kg × 1.8 g/kg). Edit in Profile.`);
+        } else {
+          setTargetsHint('Log weight in Stats to personalize protein target (1.8 g/kg).');
+        }
+
         const todayRow = rows.find((r) => r.date === today());
         if (todayRow) {
           setLogged({
@@ -299,7 +316,7 @@ export default function DietTracker() {
           });
         }
       })
-      .catch(() => {/* silently fail — network may be unavailable in dev */});
+      .catch(() => {});
   }, []);
 
   async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -386,7 +403,7 @@ export default function DietTracker() {
     }
   }
 
-  const calPct = pct(logged.calories, TARGETS.calories);
+  const calPct = pct(logged.calories, targets.calories);
 
   return (
     <div className="flex flex-col gap-6">
@@ -396,6 +413,9 @@ export default function DietTracker() {
         <div>
           <h2 className="text-lg font-bold text-white">Nutrition</h2>
           <p className="text-xs text-gray-500 mt-0.5">Daily targets & intake</p>
+          {targetsHint && (
+            <p className="text-[10px] text-violet-400/80 mt-1 max-w-[240px] leading-snug">{targetsHint}</p>
+          )}
         </div>
         <button
           type="button"
@@ -452,12 +472,12 @@ export default function DietTracker() {
           <span className="text-xs font-semibold uppercase tracking-widest text-gray-400">Calories</span>
           <div className="flex items-baseline gap-1">
             <span className="text-3xl font-black tabular-nums text-white">{logged.calories}</span>
-            <span className="text-sm text-gray-500">/ {TARGETS.calories} kcal</span>
+            <span className="text-sm text-gray-500">/ {targets.calories} kcal</span>
           </div>
           <span className="text-xs text-gray-500">
-            {logged.calories <= TARGETS.calories
-              ? `${TARGETS.calories - logged.calories} kcal remaining`
-              : `${logged.calories - TARGETS.calories} kcal over target`}
+            {logged.calories <= targets.calories
+              ? `${targets.calories - logged.calories} kcal remaining`
+              : `${logged.calories - targets.calories} kcal over target`}
           </span>
         </div>
       </div>
@@ -493,9 +513,9 @@ export default function DietTracker() {
           );
         })()}
 
-        <MacroBar label="Protein" consumed={logged.protein} target={TARGETS.protein} unit="g" color="bg-blue-500" />
-        <MacroBar label="Carbs"   consumed={logged.carbs}   target={TARGETS.carbs}   unit="g" color="bg-amber-500" />
-        <MacroBar label="Fat"     consumed={logged.fat}     target={TARGETS.fat}     unit="g" color="bg-rose-500" />
+        <MacroBar label="Protein" consumed={logged.protein} target={targets.protein} unit="g" color="bg-blue-500" />
+        <MacroBar label="Carbs"   consumed={logged.carbs}   target={targets.carbs}   unit="g" color="bg-amber-500" />
+        <MacroBar label="Fat"     consumed={logged.fat}     target={targets.fat}     unit="g" color="bg-rose-500" />
 
         {/* Nothing logged yet — empty state */}
         {logged.calories === 0 && logged.protein === 0 && logged.carbs === 0 && logged.fat === 0 && (
@@ -598,7 +618,7 @@ export default function DietTracker() {
         const { activeCalories, steps } = wearableSync;
         // Eat-back only for unusually high movement days (not normal morning NEAT).
         const eatBack     = Math.min(Math.round(activeCalories * 0.5), 500);
-        const adjustedTarget = TARGETS.calories + eatBack;
+        const adjustedTarget = targets.calories + eatBack;
         const isHigh      = activeCalories >= 600;
 
         return (
@@ -630,7 +650,7 @@ export default function DietTracker() {
             ) : (
               <p className="text-xs text-amber-300/70">
                 Sub pragul de ajustare (600 kcal). Ținta rămâne{' '}
-                <span className="font-bold text-amber-300">{TARGETS.calories.toLocaleString()} kcal</span>
+                <span className="font-bold text-amber-300">{targets.calories.toLocaleString()} kcal</span>
                 {' '}— nu e nevoie să compensezi dimineața obișnuită.
               </p>
             )}

@@ -1,5 +1,7 @@
 /** Shared server-side validation for workout set payloads. */
 
+import { isBandedExercise, isValidBandLevel } from './exerciseKind';
+
 export interface ValidatedSet {
   exerciseName: string;
   weight:       number;
@@ -36,6 +38,21 @@ export function validateSetPayload(body: {
   const exerciseName = typeof body.exercise_name === 'string' ? body.exercise_name.trim() : '';
   if (!exerciseName || exerciseName.length > 120) {
     return { ok: false, error: 'exercise_name is required (max 120 characters).' };
+  }
+
+  if (isBandedExercise(exerciseName)) {
+    const level = typeof body.weight === 'number' ? body.weight : Number(body.weight);
+    if (!isValidBandLevel(level)) {
+      return { ok: false, error: 'Banded exercises use resistance level 1 (Light), 2 (Medium), or 3 (Heavy).' };
+    }
+    const reps = parsePositiveInt(body.reps, 'reps', MAX_REPS);
+    if (typeof reps === 'string') return { ok: false, error: reps };
+    const setNumber = parsePositiveInt(body.set_number, 'set_number', MAX_SET_NUM);
+    if (typeof setNumber === 'string') return { ok: false, error: setNumber };
+    return {
+      ok: true,
+      data: { exerciseName, weight: level, reps, setNumber },
+    };
   }
 
   const weight = parseWeight(body.weight);

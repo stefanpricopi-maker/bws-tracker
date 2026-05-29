@@ -6,6 +6,10 @@
 //          different motor patterns → prevents adaptive resistance + joint wear.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Weeks of progressive work before the scheduled deload week. */
+export const MESOCYCLE_WORK_WEEKS = 7;
+
+/** Total weeks per block (includes 1 deload week at the end). */
 export const MESOCYCLE_WEEKS = 8;
 
 /**
@@ -124,7 +128,14 @@ export function weeksElapsed(blockStartDate: string): number {
 }
 
 /**
- * Returns true when the current mesocycle is complete (>= MESOCYCLE_WEEKS).
+ * Week index 7 (displayed as week 8): planned deload — lower volume, ~12% lighter loads.
+ */
+export function isDeloadWeek(weeksElapsed: number): boolean {
+  return weeksElapsed >= MESOCYCLE_WORK_WEEKS && weeksElapsed < MESOCYCLE_WEEKS;
+}
+
+/**
+ * Returns true when the current mesocycle is complete (after deload week).
  */
 export function isMesocycleComplete(blockStartDate: string): boolean {
   return weeksElapsed(blockStartDate) >= MESOCYCLE_WEEKS;

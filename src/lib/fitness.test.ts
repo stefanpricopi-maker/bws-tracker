@@ -355,16 +355,9 @@ describe('roundTo2_5', () => {
 // ── calcDeloadWeight ──────────────────────────────────────────────────────────
 
 describe('calcDeloadWeight', () => {
-  // 80 * 0.8 = 64 → roundTo2_5(64) = Math.round(25.6)*2.5 = 26*2.5 = 65
-  it('80 kg → 65 kg', () => expect(calcDeloadWeight(80)).toBe(65));
-  // 100 * 0.8 = 80 → already on 2.5 boundary
-  it('100 kg → 80 kg', () => expect(calcDeloadWeight(100)).toBe(80));
-  // 60 * 0.8 = 48 → Math.round(19.2)*2.5 = 19*2.5 = 47.5
-  it('60 kg → 47.5 kg', () => expect(calcDeloadWeight(60)).toBe(47.5));
-  // 120 * 0.8 = 96 → Math.round(38.4)*2.5 = 38*2.5 = 95
-  it('120 kg → 95 kg', () => expect(calcDeloadWeight(120)).toBe(95));
-  // 50 * 0.8 = 40 → already on 2.5 boundary
-  it('50 kg → 40 kg',  () => expect(calcDeloadWeight(50)).toBe(40));
+  it('80 kg → 70 kg (~12.5% deload)', () => expect(calcDeloadWeight(80)).toBe(70));
+  it('100 kg → 87.5 kg', () => expect(calcDeloadWeight(100)).toBe(87.5));
+  it('banded: Heavy → Medium', () => expect(calcDeloadWeight(3, true)).toBe(2));
 });
 
 // ── detectDeload ──────────────────────────────────────────────────────────────
@@ -374,6 +367,11 @@ describe('detectDeload', () => {
     expect(detectDeload([])).toBe(false);
     expect(detectDeload([{ maxWeight: 80, maxReps: 8 }])).toBe(false);
     expect(detectDeload([{ maxWeight: 80, maxReps: 8 }, { maxWeight: 80, maxReps: 8 }])).toBe(false);
+  });
+
+  it('ignores sessions older than 56-day lookback', () => {
+    const old = { maxWeight: 80, maxReps: 8, date: '2020-01-01' };
+    expect(detectDeload([old, old, old])).toBe(false);
   });
 
   it('returns true when weight and reps are perfectly stagnant over 3 sessions', () => {
