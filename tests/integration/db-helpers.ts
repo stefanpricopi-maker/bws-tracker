@@ -34,7 +34,8 @@ export async function initSchema(client: ReturnType<typeof createClient>) {
       protein_g   REAL,
       carbs_g     REAL,
       fat_g       REAL,
-      photo_url   TEXT
+      photo_url   TEXT,
+      meals_json  TEXT
     );
 
     CREATE TABLE IF NOT EXISTS workouts (
@@ -81,6 +82,7 @@ export async function initSchema(client: ReturnType<typeof createClient>) {
       target_carbs_g        INTEGER DEFAULT 113,
       target_fat_g          INTEGER DEFAULT 75,
       target_steps          INTEGER DEFAULT 10000,
+      meal_preferences_json TEXT,
       updated_at            TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     );
 

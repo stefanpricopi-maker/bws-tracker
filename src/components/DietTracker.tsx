@@ -1,5 +1,26 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { resolveDietTargets } from '../lib/macroTargets';
+import MealIntakeSection from './MealIntakeSection';
+import MealFoodPreferences from './MealFoodPreferences';
+import {
+  canGenerateMealPlan,
+  defaultMealPreferences,
+  MIN_ALLOWED_FOODS,
+  type MealPreferences,
+} from '../lib/mealPreferences';
+import {
+  MEAL_SLOTS,
+  MEAL_LABELS,
+  EMPTY_DAY_MEALS,
+  storedMealsFromForm,
+  sumDayMeals,
+  parseStoredDayMeals,
+  dayMealsFormFromStored,
+  dayMealsFormFromDailyTotals,
+  mealSlotFromPlanName,
+  type DayMealsForm,
+  type MealSlot,
+} from '../lib/mealIntake';
 
 // ── Macro-Solver types ──────────────────────────────────────────────────────
 interface MealIngredient {
@@ -38,8 +59,20 @@ function pct(consumed: number, target: number) {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-function caloriesFromMacros(protein: number, carbs: number, fat: number): number {
-  return Math.round(protein * 4 + carbs * 4 + fat * 9);
+const MEAL_ICONS: Record<MealSlot, string> = {
+  breakfast: '🌅',
+  lunch:     '☀️',
+  snacks:    '🍫',
+  dinner:    '🌙',
+};
+
+function applyLoggedTotals(setLogged: (v: Intake) => void, totals: ReturnType<typeof sumDayMeals>) {
+  setLogged({
+    calories: totals.calories,
+    protein:  totals.protein,
+    carbs:    totals.carbs,
+    fat:      totals.fat,
+  });
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
@@ -184,7 +217,8 @@ function SyncWearableButton({ onSync }: SyncWearableButtonProps) {
 
 export default function DietTracker() {
   const [logged, setLogged]   = useState<Intake>(EMPTY);
-  const [form,   setForm]     = useState({ calories: '', protein: '', carbs: '', fat: '' });
+  const [dayMeals, setDayMeals] = useState<DayMealsForm>({ ...EMPTY_DAY_MEALS });
+  const [scanMeal, setScanMeal] = useState<MealSlot>('breakfast');
   const [saving, setSaving]   = useState(false);
   const [status, setStatus]   = useState<'idle' | 'ok' | 'err'>('idle');
   const [scanning, setScanning]   = useState(false);
@@ -199,34 +233,68 @@ export default function DietTracker() {
   const [solveError, setSolveError] = useState<string | null>(null);
   const [logging, setLogging]       = useState(false);
   const [logStatus, setLogStatus]   = useState<'idle' | 'ok' | 'err'>('idle');
+  const [mealPreferences, setMealPreferences] = useState<MealPreferences>(defaultMealPreferences);
+  const [prefSaving, setPrefSaving]         = useState(false);
+  const [prefSaveStatus, setPrefSaveStatus] = useState<'idle' | 'ok' | 'err'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handleWearableSync = useCallback((data: WearableSyncResult) => setWearableSync(data), []);
 
-  function updateMacroField(key: 'protein' | 'carbs' | 'fat', value: string) {
-    setForm((f) => {
-      const next = { ...f, [key]: value };
-      const p = Number(next.protein) || 0;
-      const c = Number(next.carbs)   || 0;
-      const fat = Number(next.fat)   || 0;
-      if (p > 0 || c > 0 || fat > 0) {
-        next.calories = String(caloriesFromMacros(p, c, fat));
-      }
-      return next;
-    });
+  function setMealFields(slot: MealSlot, fields: DayMealsForm[MealSlot]) {
+    setDayMeals((m) => ({ ...m, [slot]: fields }));
   }
 
-  const computedCalories = caloriesFromMacros(
-    Number(form.protein) || 0,
-    Number(form.carbs)   || 0,
-    Number(form.fat)     || 0,
-  );
+  async function saveDayMeals(mealsForm: DayMealsForm) {
+    const stored = storedMealsFromForm(mealsForm);
+    const totals = sumDayMeals(stored);
+    const res = await fetch('/api/logs', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        date:        today(),
+        meals:       stored,
+        calories_in: totals.calories || null,
+        protein_g:   totals.protein  || null,
+        carbs_g:     totals.carbs    || null,
+        fat_g:       totals.fat      || null,
+      }),
+    });
+    if (!res.ok) throw new Error('API error');
+    applyLoggedTotals(setLogged, totals);
+    return totals;
+  }
+
+  async function saveMealPreferences(): Promise<boolean> {
+    setPrefSaving(true);
+    setPrefSaveStatus('idle');
+    try {
+      const res = await fetch('/api/profile', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ mealPreferences }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      setPrefSaveStatus('ok');
+      return true;
+    } catch {
+      setPrefSaveStatus('err');
+      return false;
+    } finally {
+      setPrefSaving(false);
+    }
+  }
 
   async function handleSolveMacros() {
+    if (!canGenerateMealPlan(mealPreferences.allowedIds)) {
+      setSolveError(`Selectează cel puțin ${MIN_ALLOWED_FOODS} alimente în lista de mai jos.`);
+      return;
+    }
     setSolving(true);
     setSolveError(null);
     setMealPlan(null);
     setLogStatus('idle');
     try {
+      const saved = await saveMealPreferences();
+      if (!saved) throw new Error('Nu am putut salva preferințele.');
       const res  = await fetch('/api/macro-solver');
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error ?? 'Unknown error');
@@ -246,32 +314,21 @@ export default function DietTracker() {
     setLogging(true);
     setLogStatus('idle');
     try {
-      const t = mealPlan.daily_totals;
-      const res = await fetch('/api/logs', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          date:        new Date().toISOString().slice(0, 10),
-          calories_in: Math.round(t.calories),
-          protein_g:   Math.round(t.protein),
-          carbs_g:     Math.round(t.carbs),
-          fat_g:       Math.round(t.fat),
-        }),
-      });
-      if (!res.ok) throw new Error('Save failed');
-      const updated = await res.json();
-      setLogged({
-        calories: updated.caloriesIn ?? 0,
-        protein:  updated.proteinG   ?? 0,
-        carbs:    updated.carbsG     ?? 0,
-        fat:      updated.fatG       ?? 0,
-      });
-      setForm({
-        calories: String(Math.round(t.calories)),
-        protein:  String(Math.round(t.protein)),
-        carbs:    String(Math.round(t.carbs)),
-        fat:      String(Math.round(t.fat)),
-      });
+      const nextForm: DayMealsForm = { ...EMPTY_DAY_MEALS };
+      for (const meal of mealPlan.meals) {
+        const slot = mealSlotFromPlanName(meal.meal_name);
+        const p = meal.ingredients.reduce((s, i) => s + i.protein, 0);
+        const c = meal.ingredients.reduce((s, i) => s + i.carbs, 0);
+        const f = meal.ingredients.reduce((s, i) => s + i.fat, 0);
+        nextForm[slot] = {
+          calories: String(Math.round(meal.total_calories)),
+          protein:  String(Math.round(p)),
+          carbs:    String(Math.round(c)),
+          fat:      String(Math.round(f)),
+        };
+      }
+      await saveDayMeals(nextForm);
+      setDayMeals(nextForm);
       setLogStatus('ok');
     } catch {
       setLogStatus('err');
@@ -287,13 +344,30 @@ export default function DietTracker() {
       fetch('/api/logs?days=30').then((r) => r.json()),
     ])
       .then(([profile, rows]: [
-        { goals?: { targetCaloriesKcal?: number | null; targetProteinG?: number | null; targetCarbsG?: number | null; targetFatG?: number | null } | null },
-        Array<{ date: string; weight_kg?: number | null; caloriesIn: number | null; proteinG: number | null; carbsG: number | null; fatG: number | null }>,
+        { goals?: {
+          targetCaloriesKcal?: number | null;
+          targetProteinG?: number | null;
+          targetCarbsG?: number | null;
+          targetFatG?: number | null;
+          mealPreferences?: MealPreferences;
+        } | null },
+        Array<{
+          date: string;
+          weight_kg?: number | null;
+          calories_in?: number | null;
+          protein_g?: number | null;
+          carbs_g?: number | null;
+          fat_g?: number | null;
+          meals?: ReturnType<typeof parseStoredDayMeals>;
+        }>,
       ]) => {
         const weightLogs = rows.filter((r) => r.weight_kg != null);
         const latestWeight = weightLogs.length > 0 ? weightLogs[0].weight_kg! : null;
         const t = resolveDietTargets(profile.goals ?? null, latestWeight);
         setTargets({ calories: t.calories, protein: t.protein, carbs: t.carbs, fat: t.fat });
+        if (profile.goals?.mealPreferences) {
+          setMealPreferences(profile.goals.mealPreferences);
+        }
         if (latestWeight) {
           setTargetsHint(`Protein target: ${t.protein}g (${latestWeight} kg × 1.8 g/kg). Edit in Profile.`);
         } else {
@@ -302,18 +376,18 @@ export default function DietTracker() {
 
         const todayRow = rows.find((r) => r.date === today());
         if (todayRow) {
-          setLogged({
-            calories: todayRow.caloriesIn ?? 0,
-            protein:  todayRow.proteinG   ?? 0,
-            carbs:    todayRow.carbsG     ?? 0,
-            fat:      todayRow.fatG       ?? 0,
-          });
-          setForm({
-            calories: todayRow.caloriesIn?.toString() ?? '',
-            protein:  todayRow.proteinG?.toString()   ?? '',
-            carbs:    todayRow.carbsG?.toString()     ?? '',
-            fat:      todayRow.fatG?.toString()       ?? '',
-          });
+          const totals = {
+            calories: todayRow.calories_in ?? 0,
+            protein:  todayRow.protein_g   ?? 0,
+            carbs:    todayRow.carbs_g     ?? 0,
+            fat:      todayRow.fat_g       ?? 0,
+          };
+          applyLoggedTotals(setLogged, totals);
+          if (todayRow.meals) {
+            setDayMeals(dayMealsFormFromStored(todayRow.meals));
+          } else {
+            setDayMeals(dayMealsFormFromDailyTotals(totals));
+          }
         }
       })
       .catch(() => {});
@@ -355,13 +429,15 @@ export default function DietTracker() {
 
       const macros = await res.json() as { calories: number; protein: number; carbs: number; fat: number };
 
-      // Auto-fill the form fields
-      setForm({
-        calories: macros.calories > 0 ? String(macros.calories) : '',
-        protein:  macros.protein  > 0 ? String(macros.protein)  : '',
-        carbs:    macros.carbs    > 0 ? String(macros.carbs)    : '',
-        fat:      macros.fat      > 0 ? String(macros.fat)      : '',
-      });
+      setDayMeals((m) => ({
+        ...m,
+        [scanMeal]: {
+          calories: macros.calories > 0 ? String(macros.calories) : '',
+          protein:  macros.protein  > 0 ? String(macros.protein)  : '',
+          carbs:    macros.carbs    > 0 ? String(macros.carbs)    : '',
+          fat:      macros.fat      > 0 ? String(macros.fat)      : '',
+        },
+      }));
       setScanStatus('ok');
     } catch {
       setScanStatus('err');
@@ -377,24 +453,7 @@ export default function DietTracker() {
     setSaving(true);
     setStatus('idle');
     try {
-      const res = await fetch('/api/logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date:         today(),
-          calories_in:  Number(form.calories) || null,
-          protein_g:    Number(form.protein)  || null,
-          carbs_g:      Number(form.carbs)    || null,
-          fat_g:        Number(form.fat)      || null,
-        }),
-      });
-      if (!res.ok) throw new Error('API error');
-      setLogged({
-        calories: Number(form.calories) || 0,
-        protein:  Number(form.protein)  || 0,
-        carbs:    Number(form.carbs)    || 0,
-        fat:      Number(form.fat)      || 0,
-      });
+      await saveDayMeals(dayMeals);
       setStatus('ok');
     } catch {
       setStatus('err');
@@ -409,35 +468,46 @@ export default function DietTracker() {
     <div className="flex flex-col gap-6">
 
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-bold text-white">Nutrition</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Daily targets & intake</p>
-          {targetsHint && (
-            <p className="text-[10px] text-violet-400/80 mt-1 max-w-[240px] leading-snug">{targetsHint}</p>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={handleSolveMacros}
-          disabled={solving}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold
-                     bg-emerald-600/20 border border-emerald-500/40 text-emerald-300
-                     hover:bg-emerald-600/30 active:bg-emerald-600/40
-                     disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
-        >
-          {solving ? (
-            <>
-              <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10"/>
-              </svg>
-              Solving…
-            </>
-          ) : (
-            <>🧮 Solve Macros</>
-          )}
-        </button>
+      <div>
+        <h2 className="text-lg font-bold text-white">Nutrition</h2>
+        <p className="text-xs text-gray-500 mt-0.5">Daily targets & intake</p>
+        {targetsHint && (
+          <p className="text-[10px] text-violet-400/80 mt-1 max-w-[280px] leading-snug">{targetsHint}</p>
+        )}
       </div>
+
+      <MealFoodPreferences
+        preferences={mealPreferences}
+        onChange={(prefs) => {
+          setMealPreferences(prefs);
+          setPrefSaveStatus('idle');
+        }}
+        onSave={saveMealPreferences}
+        saving={prefSaving}
+        saveStatus={prefSaveStatus}
+      />
+
+      <button
+        type="button"
+        onClick={handleSolveMacros}
+        disabled={solving || !canGenerateMealPlan(mealPreferences.allowedIds)}
+        className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold
+                   bg-emerald-600/25 border border-emerald-500/50 text-emerald-200
+                   hover:bg-emerald-600/35 active:bg-emerald-600/45
+                   disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        data-testid="generate-meal-plan"
+      >
+        {solving ? (
+          <>
+            <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10"/>
+            </svg>
+            Generez planul…
+          </>
+        ) : (
+          <>🧮 Generează plan AI</>
+        )}
+      </button>
 
       {/* Calorie ring-style hero */}
       <div
@@ -520,12 +590,11 @@ export default function DietTracker() {
         {/* Nothing logged yet — empty state */}
         {logged.calories === 0 && logged.protein === 0 && logged.carbs === 0 && logged.fat === 0 && (
           <p className="text-center text-gray-500 text-xs py-2">
-            No intake logged today. Fill in the form below or use Solve Macros.
+            No intake logged today. Log each meal below or use Solve Macros.
           </p>
         )}
       </div>
 
-      {/* ── Macro-Solver error ─────────────────────────────────────── */}
       {solveError && (
         <div className="rounded-xl px-4 py-3 bg-red-900/40 border border-red-500/40">
           <p className="text-xs font-semibold text-red-400">⚠ Macro solver error</p>
@@ -663,37 +732,38 @@ export default function DietTracker() {
         {/* Section header + scan button */}
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
-            Log today's intake
+            Ce ai mâncat azi
           </span>
-          <div className="flex items-center gap-2">
           <SyncWearableButton onSync={handleWearableSync} />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] text-gray-500 uppercase tracking-wide">Scan pentru:</span>
+          {MEAL_SLOTS.map((slot) => (
+            <button
+              key={slot}
+              type="button"
+              onClick={() => setScanMeal(slot)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
+                scanMeal === slot
+                  ? 'bg-violet-600/30 border-violet-500/50 text-violet-200'
+                  : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+              }`}
+            >
+              {MEAL_ICONS[slot]} {MEAL_LABELS[slot]}
+            </button>
+          ))}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={scanning}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold
                        bg-violet-600/20 border border-violet-500/40 text-violet-300
                        hover:bg-violet-600/30 active:bg-violet-600/40
                        disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {scanning ? (
-              <>
-                <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10"/>
-                </svg>
-                Scanning…
-              </>
-            ) : (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                  <circle cx="12" cy="13" r="4"/>
-                </svg>
-                Scan Meal
-              </>
-            )}
+            {scanning ? 'Scanning…' : '📷 Scan'}
           </button>
-          {/* Hidden file input — accept images, prefer camera on mobile */}
           <input
             ref={fileInputRef}
             type="file"
@@ -702,7 +772,6 @@ export default function DietTracker() {
             className="hidden"
             onChange={handleImageChange}
           />
-          </div>
         </div>
 
         {/* Image preview + scan feedback */}
@@ -716,7 +785,9 @@ export default function DietTracker() {
             )}
             {scanStatus === 'ok' && (
               <div className="absolute bottom-0 inset-x-0 bg-green-500/20 border-t border-green-500/40 px-3 py-1.5">
-                <p className="text-xs font-semibold text-green-400">✓ Macros detected — fields pre-filled</p>
+                <p className="text-xs font-semibold text-green-400">
+                  ✓ Macros detectate — {MEAL_LABELS[scanMeal]}
+                </p>
               </div>
             )}
             {scanStatus === 'err' && (
@@ -727,46 +798,31 @@ export default function DietTracker() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
-          {([
-            ['protein',  'Protein',  'g',    '💪', false],
-            ['carbs',    'Carbs',    'g',    '🍚', false],
-            ['fat',      'Fat',      'g',    '🥑', false],
-            ['calories', 'Calories', 'kcal', '🔥', true],
-          ] as [keyof typeof form, string, string, string, boolean][]).map(
-            ([key, label, unit, icon, isCalories]) => (
-              <div key={key} className="flex flex-col gap-1">
-                <label className="flex items-center gap-1 text-[11px] font-semibold text-gray-400 px-1">
-                  <span>{icon}</span>
-                  <span>{label}</span>
-                  <span className="text-gray-600 font-normal">({unit})</span>
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step={key === 'calories' ? '1' : '0.1'}
-                  placeholder={isCalories && computedCalories > 0 ? String(computedCalories) : '0'}
-                  value={form[key]}
-                  onChange={(e) => {
-                    if (key === 'protein' || key === 'carbs' || key === 'fat') {
-                      updateMacroField(key, e.target.value);
-                    } else {
-                      setForm((f) => ({ ...f, [key]: e.target.value }));
-                    }
-                  }}
-                  className="rounded-xl bg-gray-800 border border-gray-700 px-3 py-3
-                             text-white placeholder-gray-600 text-sm
-                             focus:outline-none focus:border-violet-500 transition-colors"
-                />
-                {isCalories && computedCalories > 0 && (
-                  <p className="text-[10px] text-gray-500 px-1">
-                    Auto: 4×P + 4×C + 9×F = {computedCalories} kcal
-                  </p>
-                )}
-              </div>
-            )
-          )}
+        <div className="flex flex-col gap-2">
+          {MEAL_SLOTS.map((slot) => (
+            <MealIntakeSection
+              key={slot}
+              slot={slot}
+              label={MEAL_LABELS[slot]}
+              icon={MEAL_ICONS[slot]}
+              fields={dayMeals[slot]}
+              onChange={(fields) => setMealFields(slot, fields)}
+              defaultExpanded={slot === 'breakfast'}
+            />
+          ))}
         </div>
+
+        {(() => {
+          const preview = sumDayMeals(storedMealsFromForm(dayMeals));
+          return (
+            <p className="text-center text-[11px] text-gray-500 tabular-nums">
+              Total zi:{' '}
+              <span className="text-white font-semibold">{preview.calories} kcal</span>
+              {' · '}
+              {preview.protein}g P · {preview.carbs}g C · {preview.fat}g F
+            </p>
+          );
+        })()}
 
         <button
           type="submit"
@@ -774,7 +830,7 @@ export default function DietTracker() {
           className="rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white
                      transition-colors hover:bg-violet-500 active:bg-violet-700 disabled:opacity-50"
         >
-          {saving ? 'Saving…' : 'Save Intake'}
+          {saving ? 'Se salvează…' : 'Salvează ziua'}
         </button>
 
         {status === 'ok'  && <p className="text-xs text-green-400 text-center">Saved ✓</p>}

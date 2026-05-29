@@ -4,6 +4,12 @@ import { db } from '../../db';
 import { users, userGoals, googleTokens, type NewUserGoals } from '../../db/schema';
 import { isAuthEnabled } from '../../lib/auth';
 import { eq } from 'drizzle-orm';
+import {
+  parseMealPreferencesJson,
+  resolveMealPreferences,
+  sanitizeMealPreferencesInput,
+  serializeMealPreferences,
+} from '../../lib/mealPreferences';
 
 
 export const GET: APIRoute = async ({ request }) => {
@@ -39,6 +45,9 @@ export const GET: APIRoute = async ({ request }) => {
           targetCarbsG: goals.targetCarbsG,
           targetFatG: goals.targetFatG,
           targetSteps: goals.targetSteps,
+          mealPreferences: resolveMealPreferences(
+            parseMealPreferencesJson(goals.mealPreferencesJson),
+          ),
         }
       : null,
   };
@@ -53,7 +62,12 @@ export const POST: APIRoute = async ({ request }) => {
   const auth = await requireUser(request);
   if (auth instanceof Response) return auth;
   const { userId } = auth;
-  const body = (await request.json()) as Partial<NewUserGoals> & { name?: string };
+  const body = (await request.json()) as Partial<NewUserGoals> & {
+    name?: string;
+    mealPreferences?: unknown;
+    /** @deprecated use mealPreferences */
+    mealPreferencesAllowed?: unknown;
+  };
 
   if (body.name !== undefined) {
     await db.update(users).set({ name: body.name }).where(eq(users.id, userId));
@@ -81,6 +95,29 @@ export const POST: APIRoute = async ({ request }) => {
   if (body.targetCarbsG !== undefined) updateSet.targetCarbsG = body.targetCarbsG;
   if (body.targetFatG !== undefined) updateSet.targetFatG = body.targetFatG;
   if (body.targetSteps !== undefined) updateSet.targetSteps = body.targetSteps;
+
+  if (body.mealPreferences !== undefined) {
+    const prefs = sanitizeMealPreferencesInput(body.mealPreferences);
+    if (!prefs) {
+      return new Response(JSON.stringify({ error: 'Invalid meal preferences.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    updateSet.mealPreferencesJson = serializeMealPreferences(prefs);
+  } else if (body.mealPreferencesAllowed !== undefined) {
+    const prefs = sanitizeMealPreferencesInput({
+      allowedIds: body.mealPreferencesAllowed,
+      customFoods: [],
+    });
+    if (!prefs) {
+      return new Response(JSON.stringify({ error: 'Invalid meal preferences.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    updateSet.mealPreferencesJson = serializeMealPreferences(prefs);
+  }
 
   await db.insert(userGoals)
     .values(insertValues)

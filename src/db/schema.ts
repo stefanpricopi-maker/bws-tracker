@@ -22,6 +22,7 @@ export const dailyLogs = sqliteTable('daily_logs', {
   carbsG: real('carbs_g'),
   fatG: real('fat_g'),
   photoUrl: text('photo_url'),
+  mealsJson: text('meals_json'),
 });
 
 export const workouts = sqliteTable('workouts', {
@@ -81,6 +82,7 @@ export const userGoals = sqliteTable('user_goals', {
   targetCarbsG: integer('target_carbs_g').default(113),
   targetFatG: integer('target_fat_g').default(75),
   targetSteps: integer('target_steps').default(10000),
+  mealPreferencesJson: text('meal_preferences_json'),
   updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
 });
 
