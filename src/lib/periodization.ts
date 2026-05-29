@@ -134,6 +134,17 @@ export function isDeloadWeek(weeksElapsed: number): boolean {
   return weeksElapsed >= MESOCYCLE_WORK_WEEKS && weeksElapsed < MESOCYCLE_WEEKS;
 }
 
+/** Keep 60% of working sets during mesocycle deload week (~40% volume cut). */
+export const DELOAD_VOLUME_FACTOR = 0.6;
+
+/**
+ * Set count for a deload week (min 1). Example: 3 → 2, 4 → 2.
+ */
+export function deloadSetCount(sets: number): number {
+  if (sets <= 1) return 1;
+  return Math.max(1, Math.round(sets * DELOAD_VOLUME_FACTOR));
+}
+
 /**
  * Returns true when the current mesocycle is complete (after deload week).
  */

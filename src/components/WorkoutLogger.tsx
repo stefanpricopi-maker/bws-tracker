@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { autoRegulate as autoRegulateCalc, calcDeloadWeight, weightIncrementKg } from '../lib/fitness';
-import { getExerciseForBlock, EXERCISE_SWAP, MESOCYCLE_WEEKS } from '../lib/periodization';
+import { getExerciseForBlock, EXERCISE_SWAP, MESOCYCLE_WEEKS, deloadSetCount } from '../lib/periodization';
 import { isBandedExercise } from '../lib/exerciseKind';
 import type { PlannedExercise } from './WorkoutPlayer';
 import ExerciseManager from './ExerciseManager';
@@ -180,15 +180,23 @@ function getBadge(exercise: ExerciseLog, sets: SetInput[]): Badge | null {
 const MAKE_SETS = (n = 3): SetInput[] =>
   Array.from({ length: n }, (_, i) => ({ weight: '', reps: '', setLabel: String(i + 1) }));
 
-const EMPTY_SETS = (): SetInput[] => MAKE_SETS(3);
+const DEFAULT_WORKING_SETS = 3;
+const EMPTY_SETS = (isDeloadWeek = false): SetInput[] =>
+  MAKE_SETS(isDeloadWeek ? deloadSetCount(DEFAULT_WORKING_SETS) : DEFAULT_WORKING_SETS);
 
-// Myo-Reps: 1 activation set to near-failure + 3 cluster mini-sets
-const MYO_SETS = (): SetInput[] => [
-  { weight: '', reps: '', setLabel: 'ACT' },
-  { weight: '', reps: '', setLabel: 'M1' },
-  { weight: '', reps: '', setLabel: 'M2' },
-  { weight: '', reps: '', setLabel: 'M3' },
-];
+// Myo-Reps: 1 activation set to near-failure + 3 cluster mini-sets (deload: ACT + 1 mini)
+const MYO_SETS = (isDeloadWeek = false): SetInput[] =>
+  isDeloadWeek
+    ? [
+        { weight: '', reps: '', setLabel: 'ACT' },
+        { weight: '', reps: '', setLabel: 'M1' },
+      ]
+    : [
+        { weight: '', reps: '', setLabel: 'ACT' },
+        { weight: '', reps: '', setLabel: 'M1' },
+        { weight: '', reps: '', setLabel: 'M2' },
+        { weight: '', reps: '', setLabel: 'M3' },
+      ];
 
 /**
  * Phase 12 — Mathematical Auto-Regulation Engine
@@ -202,13 +210,18 @@ function buildExerciseLogs(day: DayConfig, medMode = false): ExerciseLog[] {
   return buildExerciseLogsForBlock(day, medMode, 1);
 }
 
-function buildExerciseLogsForBlock(day: DayConfig, medMode = false, block = 1): ExerciseLog[] {
+function buildExerciseLogsForBlock(
+  day: DayConfig,
+  medMode = false,
+  block = 1,
+  isDeloadWeek = false,
+): ExerciseLog[] {
   const list = medMode && day.medExercise
     ? [day.medExercise]
     : day.exercises;
   return list.map((originalName) => ({
     name: getExerciseForBlock(originalName, block),
-    sets: medMode ? MYO_SETS() : EMPTY_SETS(),
+    sets: medMode ? MYO_SETS(isDeloadWeek) : EMPTY_SETS(isDeloadWeek),
     lastWeight: null,
     lastReps: null,
     lastDate: null,
@@ -309,11 +322,12 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
   async function loadAiDay(planned: Array<{ name: string; sets: number }>) {
     const items = planned.filter((p) => p.name);
     if (!items.length) return;
+    const isDeload = meso?.isDeloadWeek ?? false;
     setLoadingPrev(true);
     // Build initial logs using AI-recommended set counts
     const fresh: ExerciseLog[] = items.map(({ name, sets }) => ({
       name,
-      sets: MAKE_SETS(sets),
+      sets: MAKE_SETS(isDeload ? deloadSetCount(sets) : sets),
       lastWeight: null, lastReps: null, lastDate: null,
       targetWeight: null, targetReps: null,
       isWeightIncrease: false, needsDeload: false,
@@ -436,9 +450,10 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
   useEffect(() => {
     const day = SPLIT[selectedDay];
     const block = meso?.currentBlock ?? 1;
-    const fresh = buildExerciseLogsForBlock(day, medMode, block);
+    const isDeload = meso?.isDeloadWeek ?? false;
+    const fresh = buildExerciseLogsForBlock(day, medMode, block, isDeload);
     setExercises(fresh);
-    fetchPrevStats(day, medMode, meso?.isDeloadWeek ?? false);
+    fetchPrevStats(day, medMode, isDeload);
   }, [selectedDay, medMode, fetchPrevStats, meso?.currentBlock, meso?.isDeloadWeek]);
 
   function handleSetChange(
@@ -500,7 +515,12 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
       });
       if (!res.ok) throw new Error('Server error');
       showToast(medMode ? 'M.E.D. session saved! Every rep counts. 💪' : 'Workout saved!');
-      setExercises(buildExerciseLogs(day, medMode));
+      setExercises(buildExerciseLogsForBlock(
+        day,
+        medMode,
+        meso?.currentBlock ?? 1,
+        meso?.isDeloadWeek ?? false,
+      ));
     } catch {
       showToast('Failed to save — please try again.');
     } finally {
@@ -655,7 +675,7 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
         <div className="rounded-2xl bg-blue-900/30 border border-blue-500/40 px-4 py-3">
           <p className="text-sm font-bold text-blue-200">🔄 Deload week (week {meso.displayWeek ?? 8})</p>
           <p className="text-xs text-blue-300/80 mt-1 leading-relaxed">
-            Planned recovery: ~12% lighter loads, focus on form. Targets are pre-adjusted below.
+            Planned recovery: ~40% fewer sets, ~12% lighter loads. Targets are pre-adjusted below.
           </p>
         </div>
       )}
@@ -782,7 +802,10 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                             <button
                               type="button"
                               onClick={() => onStartPlayer(
-                                d.exercises.map((e) => ({ name: e.name, sets: e.sets })),
+                                d.exercises.map((e) => ({
+                                  name: e.name,
+                                  sets: meso?.isDeloadWeek ? deloadSetCount(e.sets) : e.sets,
+                                })),
                                 d.category,
                               )}
                               className="text-xs font-bold px-3 py-1.5 rounded-xl
