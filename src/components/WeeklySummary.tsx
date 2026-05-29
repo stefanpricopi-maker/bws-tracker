@@ -48,7 +48,19 @@ export default function WeeklySummary() {
   }, []);
 
   if (loading) return null;
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="bg-gray-800/40 border border-gray-700/50 rounded-2xl p-4 flex items-start gap-3">
+        <span className="text-2xl leading-none">📅</span>
+        <div>
+          <p className="text-sm font-semibold text-gray-300">Weekly Summary</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Start logging your meals, steps, and workouts and your weekly recap will appear here.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const weightLabel =
     data.weightLostKg == null

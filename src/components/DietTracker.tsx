@@ -436,9 +436,42 @@ export default function DietTracker() {
         className="rounded-2xl p-4 flex flex-col gap-4"
         style={{ backgroundColor: '#1a1d27', border: '1px solid #2a2f45' }}
       >
+        {/* Macro split proportional bar */}
+        {(logged.protein + logged.carbs + logged.fat) > 0 && (() => {
+          const totalG   = logged.protein + logged.carbs + logged.fat;
+          const pPct     = Math.round((logged.protein / totalG) * 100);
+          const cPct     = Math.round((logged.carbs   / totalG) * 100);
+          const fPct     = 100 - pPct - cPct;
+          return (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex justify-between text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                <span>Macro split</span>
+                <span className="font-normal">{totalG}g total</span>
+              </div>
+              <div className="flex h-3 rounded-full overflow-hidden gap-px">
+                {pPct > 0 && <div className="bg-blue-500  transition-all" style={{ width: `${pPct}%` }} title={`Protein ${pPct}%`} />}
+                {cPct > 0 && <div className="bg-amber-500 transition-all" style={{ width: `${cPct}%` }} title={`Carbs ${cPct}%`} />}
+                {fPct > 0 && <div className="bg-rose-500  transition-all" style={{ width: `${fPct}%` }} title={`Fat ${fPct}%`} />}
+              </div>
+              <div className="flex gap-3 text-[10px]">
+                <span className="flex items-center gap-1 text-blue-400"><span className="w-2 h-2 rounded-sm bg-blue-500"/>P {pPct}%</span>
+                <span className="flex items-center gap-1 text-amber-400"><span className="w-2 h-2 rounded-sm bg-amber-500"/>C {cPct}%</span>
+                <span className="flex items-center gap-1 text-rose-400"><span className="w-2 h-2 rounded-sm bg-rose-500"/>F {fPct}%</span>
+              </div>
+            </div>
+          );
+        })()}
+
         <MacroBar label="Protein" consumed={logged.protein} target={TARGETS.protein} unit="g" color="bg-blue-500" />
         <MacroBar label="Carbs"   consumed={logged.carbs}   target={TARGETS.carbs}   unit="g" color="bg-amber-500" />
         <MacroBar label="Fat"     consumed={logged.fat}     target={TARGETS.fat}     unit="g" color="bg-rose-500" />
+
+        {/* Nothing logged yet — empty state */}
+        {logged.calories === 0 && logged.protein === 0 && logged.carbs === 0 && logged.fat === 0 && (
+          <p className="text-center text-gray-500 text-xs py-2">
+            No intake logged today. Fill in the form below or use Solve Macros.
+          </p>
+        )}
       </div>
 
       {/* ── Macro-Solver error ─────────────────────────────────────── */}

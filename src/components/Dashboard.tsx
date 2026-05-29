@@ -17,7 +17,7 @@ import type { PlannedExercise } from './WorkoutPlayer';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
-type Tab = 'dashboard' | 'workout' | 'diet' | 'photos' | 'profile';
+type Tab = 'dashboard' | 'workout' | 'diet' | 'stats' | 'profile';
 
 interface NavItem {
   id:    Tab;
@@ -26,10 +26,10 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { id: 'dashboard', label: 'Home',    icon: '⊞'  },
+  { id: 'dashboard', label: 'Home',    icon: '🏠'  },
   { id: 'workout',   label: 'Workout', icon: '🏋'  },
   { id: 'diet',      label: 'Diet',    icon: '🥗'  },
-  { id: 'photos',    label: 'Photos',  icon: '📸'  },
+  { id: 'stats',     label: 'Stats',   icon: '📊'  },
   { id: 'profile',   label: 'Profile', icon: '👤'  },
 ];
 
@@ -37,17 +37,53 @@ const NAV: NavItem[] = [
 
 function DashboardTab() {
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       <AlertBanner />
       <GoalForecaster />
       <ConsistencyHeatmap />
+      <StepTracker />
       <WeeklyCheckIn />
       <WeeklySummary />
+    </div>
+  );
+}
+
+// ── Stats tab ─────────────────────────────────────────────────────────────
+
+function StatsTab() {
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-lg font-bold text-white">Statistics</h2>
+        <p className="text-xs text-gray-500 mt-0.5">Performance, body weight & trends</p>
+      </div>
       <BWSScore />
-      <hr style={{ borderColor: '#2a2f45' }} />
+      <hr style={{ borderColor: '#1f2937' }} />
       <WeightTrend />
-      <hr style={{ borderColor: '#2a2f45' }} />
-      <StepTracker />
+    </div>
+  );
+}
+
+// ── Profile tab (settings + progress photos) ──────────────────────────────
+
+function ProfileTab() {
+  const [sub, setSub] = useState<'settings' | 'photos'>('settings');
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex rounded-xl bg-gray-800 border border-gray-700 p-1 gap-1">
+        {(['settings', 'photos'] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setSub(s)}
+            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors
+              ${sub === s ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+          >
+            {s === 'settings' ? '⚙️ Settings' : '📸 Progress Photos'}
+          </button>
+        ))}
+      </div>
+      {sub === 'settings' && <ProfileSettings />}
+      {sub === 'photos'   && <PhotoVault />}
     </div>
   );
 }
@@ -175,8 +211,8 @@ export default function Dashboard() {
         {active === 'dashboard' && <DashboardTab />}
         {active === 'workout'   && <WorkoutTab onStartPlayer={startPlayer} />}
         {active === 'diet'      && <DietTracker />}
-        {active === 'photos'    && <PhotoVault />}
-        {active === 'profile'   && <ProfileSettings />}
+        {active === 'stats'     && <StatsTab />}
+        {active === 'profile'   && <ProfileTab />}
       </div>
     </>
   );

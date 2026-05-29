@@ -128,8 +128,12 @@ export default function WeightTrend() {
             Loading…
           </div>
         ) : visibleData.length === 0 ? (
-          <div className="h-[200px] flex items-center justify-center text-sm text-gray-600">
-            Log at least 7 days to see the trend.
+          <div className="h-[200px] flex flex-col items-center justify-center gap-2">
+            <span className="text-3xl">⚖️</span>
+            <p className="text-sm font-semibold text-gray-400">No weight data yet</p>
+            <p className="text-xs text-gray-600 text-center max-w-[200px]">
+              Log your weight daily — after 7 entries the trend line will appear.
+            </p>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={200}>

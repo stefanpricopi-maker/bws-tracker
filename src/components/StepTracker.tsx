@@ -163,9 +163,11 @@ export default function StepTracker() {
 
         <div className="flex items-center justify-between text-xs">
           <span style={{ color: isAchieved ? '#22c55e' : '#6b7280' }}>
-            {isAchieved
-              ? `🎯 Goal achieved! +${(steps - STEP_TARGET).toLocaleString()} bonus`
-              : `${(STEP_TARGET - steps).toLocaleString()} steps to go`}
+            {steps === 0
+              ? 'Sync wearable or log steps manually below'
+              : isAchieved
+                ? `🎯 Goal achieved! +${(steps - STEP_TARGET).toLocaleString()} bonus`
+                : `${(STEP_TARGET - steps).toLocaleString()} steps to go`}
           </span>
           <span className="font-semibold" style={{ color: isAchieved ? '#22c55e' : '#a78bfa' }}>
             {progress}%
