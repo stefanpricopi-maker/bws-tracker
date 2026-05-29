@@ -17,6 +17,8 @@
     "test:e2e:ui": "playwright test --ui",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:legacy": "node scripts/migrate.mjs",
+    "db:baseline": "node scripts/baseline-drizzle.mjs",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },

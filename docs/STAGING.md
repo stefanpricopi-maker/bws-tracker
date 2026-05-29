@@ -30,6 +30,8 @@ Vercel creates a preview URL. Run migrations against staging:
 
 ```bash
 DATABASE_URL=… DATABASE_AUTH_TOKEN=… npm run db:migrate
+
+If `db:migrate` fails on an already-provisioned DB (empty `__drizzle_migrations`), run `npm run db:baseline` once, then `db:migrate` again. For idempotent SQL apply, `npm run db:migrate:legacy` is also available.
 ```
 
 ## Local
