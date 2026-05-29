@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { autoRegulate as autoRegulateCalc, calcDeloadWeight } from '../lib/fitness';
 import { restSecondsForExercise } from '../lib/restDuration';
-import { isBandedExercise, formatBandLevel } from '../lib/exerciseKind';
+import { isBandedExercise, formatExerciseLoad } from '../lib/exerciseKind';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -517,9 +517,7 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
               </p>
               <p className="text-white font-bold text-base">
                 {exStats?.targetWeight != null
-                  ? (isBandedExercise(ex.name)
-                    ? formatBandLevel(exStats.targetWeight)
-                    : `${exStats.targetWeight} kg`)
+                  ? formatExerciseLoad(exStats.targetWeight, ex.name)
                   : '—'}
               </p>
               <p className="text-gray-400 text-xs">
@@ -531,9 +529,7 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
               <p className="text-xs text-gray-500 mb-1">📊 Previous</p>
               <p className="text-gray-300 font-semibold text-base">
                 {exStats?.lastWeight != null
-                  ? (isBandedExercise(ex.name)
-                    ? formatBandLevel(exStats.lastWeight)
-                    : `${exStats.lastWeight} kg`)
+                  ? formatExerciseLoad(exStats.lastWeight, ex.name)
                   : '—'}
               </p>
               <p className="text-gray-500 text-xs">

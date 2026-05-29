@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { autoRegulate as autoRegulateCalc, calcDeloadWeight, weightIncrementKg } from '../lib/fitness';
 import { getExerciseForBlock, EXERCISE_SWAP, MESOCYCLE_WEEKS, deloadSetCount } from '../lib/periodization';
-import { isBandedExercise } from '../lib/exerciseKind';
+import { isBandedExercise, formatExerciseLoad } from '../lib/exerciseKind';
 import type { PlannedExercise } from './WorkoutPlayer';
 import ExerciseManager from './ExerciseManager';
 
@@ -1035,13 +1035,13 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                   {loadingPrev
                     ? 'Loading previous...'
                     : ex.lastWeight !== null && ex.lastReps !== null
-                    ? `Previous: ${ex.lastWeight} kg × ${ex.lastReps} reps${ex.lastDate ? ` (${ex.lastDate})` : ''}`
+                    ? `Previous: ${formatExerciseLoad(ex.lastWeight, ex.name)} × ${ex.lastReps} reps${ex.lastDate ? ` (${ex.lastDate})` : ''}`
                     : 'No previous data'}
                 </p>
                 {/* Target hint: deload shows amber, normal auto-regulation shows violet */}
                 {!loadingPrev && ex.targetWeight !== null && ex.targetReps !== null && !medMode && (
                   <p className={`text-[11px] mt-0.5 font-medium ${ex.needsDeload ? 'text-amber-400' : 'text-violet-400'}`}>
-                    {ex.needsDeload ? '🔻' : '🎯'} Target: {ex.targetWeight} kg × {ex.targetReps} reps
+                    {ex.needsDeload ? '🔻' : '🎯'} Target: {formatExerciseLoad(ex.targetWeight, ex.name)} × {ex.targetReps} reps
                   </p>
                 )}
               </div>
