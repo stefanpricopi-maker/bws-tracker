@@ -4,8 +4,9 @@ import MealIntakeSection from './MealIntakeSection';
 import MealFoodPreferences from './MealFoodPreferences';
 import {
   canGenerateMealPlan,
-  defaultAllowedFoodIds,
+  defaultMealPreferences,
   MIN_ALLOWED_FOODS,
+  type MealPreferences,
 } from '../lib/mealPreferences';
 import {
   MEAL_SLOTS,
@@ -232,7 +233,7 @@ export default function DietTracker() {
   const [solveError, setSolveError] = useState<string | null>(null);
   const [logging, setLogging]       = useState(false);
   const [logStatus, setLogStatus]   = useState<'idle' | 'ok' | 'err'>('idle');
-  const [allowedFoodIds, setAllowedFoodIds] = useState(defaultAllowedFoodIds);
+  const [mealPreferences, setMealPreferences] = useState<MealPreferences>(defaultMealPreferences);
   const [prefSaving, setPrefSaving]         = useState(false);
   const [prefSaveStatus, setPrefSaveStatus] = useState<'idle' | 'ok' | 'err'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -269,7 +270,7 @@ export default function DietTracker() {
       const res = await fetch('/api/profile', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ mealPreferencesAllowed: allowedFoodIds }),
+        body:    JSON.stringify({ mealPreferences }),
       });
       if (!res.ok) throw new Error('Save failed');
       setPrefSaveStatus('ok');
@@ -283,7 +284,7 @@ export default function DietTracker() {
   }
 
   async function handleSolveMacros() {
-    if (!canGenerateMealPlan(allowedFoodIds)) {
+    if (!canGenerateMealPlan(mealPreferences.allowedIds)) {
       setSolveError(`Selectează cel puțin ${MIN_ALLOWED_FOODS} alimente în lista de mai jos.`);
       return;
     }
@@ -348,7 +349,7 @@ export default function DietTracker() {
           targetProteinG?: number | null;
           targetCarbsG?: number | null;
           targetFatG?: number | null;
-          mealPreferencesAllowed?: string[];
+          mealPreferences?: MealPreferences;
         } | null },
         Array<{
           date: string;
@@ -364,8 +365,8 @@ export default function DietTracker() {
         const latestWeight = weightLogs.length > 0 ? weightLogs[0].weight_kg! : null;
         const t = resolveDietTargets(profile.goals ?? null, latestWeight);
         setTargets({ calories: t.calories, protein: t.protein, carbs: t.carbs, fat: t.fat });
-        if (profile.goals?.mealPreferencesAllowed?.length) {
-          setAllowedFoodIds(profile.goals.mealPreferencesAllowed);
+        if (profile.goals?.mealPreferences) {
+          setMealPreferences(profile.goals.mealPreferences);
         }
         if (latestWeight) {
           setTargetsHint(`Protein target: ${t.protein}g (${latestWeight} kg × 1.8 g/kg). Edit in Profile.`);
@@ -476,9 +477,9 @@ export default function DietTracker() {
       </div>
 
       <MealFoodPreferences
-        allowedIds={allowedFoodIds}
-        onChange={(ids) => {
-          setAllowedFoodIds(ids);
+        preferences={mealPreferences}
+        onChange={(prefs) => {
+          setMealPreferences(prefs);
           setPrefSaveStatus('idle');
         }}
         onSave={saveMealPreferences}
@@ -489,7 +490,7 @@ export default function DietTracker() {
       <button
         type="button"
         onClick={handleSolveMacros}
-        disabled={solving || !canGenerateMealPlan(allowedFoodIds)}
+        disabled={solving || !canGenerateMealPlan(mealPreferences.allowedIds)}
         className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold
                    bg-emerald-600/25 border border-emerald-500/50 text-emerald-200
                    hover:bg-emerald-600/35 active:bg-emerald-600/45

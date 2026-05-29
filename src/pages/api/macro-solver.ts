@@ -16,8 +16,8 @@ import {
   allowedFoodLabels,
   MIN_ALLOWED_FOODS,
   canGenerateMealPlan,
-  parseStoredAllowedFoodIds,
-  resolveAllowedFoodIds,
+  parseMealPreferencesJson,
+  resolveMealPreferences,
 } from '../../lib/mealPreferences';
 import { buildMacroSolverPrompt } from '../../lib/macroSolverPrompt';
 
@@ -42,17 +42,17 @@ export const GET: APIRoute = async ({ request }) => {
       carbs:    goals?.targetCarbsG       ?? 113,
     };
 
-    const allowedIds = resolveAllowedFoodIds(
-      parseStoredAllowedFoodIds(goals?.mealPreferencesJson ?? null),
+    const prefs = resolveMealPreferences(
+      parseMealPreferencesJson(goals?.mealPreferencesJson ?? null),
     );
-    if (!canGenerateMealPlan(allowedIds)) {
+    if (!canGenerateMealPlan(prefs.allowedIds)) {
       return aiJson(
         { error: `Select at least ${MIN_ALLOWED_FOODS} foods in meal preferences before generating a plan.` },
         400,
       );
     }
 
-    const labels = allowedFoodLabels(allowedIds);
+    const labels = allowedFoodLabels(prefs);
     const { baseUrl, model } = getAiConfig();
     const raw = await chatCompletion({
       model,
