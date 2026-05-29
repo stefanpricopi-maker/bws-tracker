@@ -1,16 +1,19 @@
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../lib/apiAuth';
 import { db } from '../../db';
 import { dailyLogs, workouts, userGoals } from '../../db/schema';
 import { eq, and, gte, desc } from 'drizzle-orm';
 import { clamp, avg, calcBWSScore } from '../../lib/fitness';
 
-const USER_ID = 1;
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ request }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   const now = new Date();
 
   // ── User goals (fall back to defaults if not set) ───────────────────────
-  const [goals = null] = await db.select().from(userGoals).where(eq(userGoals.userId, USER_ID)).limit(1);
+  const [goals = null] = await db.select().from(userGoals).where(eq(userGoals.userId, userId)).limit(1);
   const targetCalories = goals?.targetCaloriesKcal ?? 1850;
   const targetProtein = goals?.targetProteinG ?? 180;
   const targetSteps = goals?.targetSteps ?? 10000;
@@ -27,7 +30,7 @@ export const GET: APIRoute = async () => {
   const logs30 = await db
     .select()
     .from(dailyLogs)
-    .where(and(eq(dailyLogs.userId, USER_ID), gte(dailyLogs.date, cutoff30Str)))
+    .where(and(eq(dailyLogs.userId, userId), gte(dailyLogs.date, cutoff30Str)))
     .orderBy(desc(dailyLogs.date));
 
   const logs7 = logs30.filter((l) => l.date >= cutoff7Str);
@@ -68,12 +71,12 @@ export const GET: APIRoute = async () => {
   const workouts7 = await db
     .select({ id: workouts.id })
     .from(workouts)
-    .where(and(eq(workouts.userId, USER_ID), gte(workouts.date, cutoff7Str)));
+    .where(and(eq(workouts.userId, userId), gte(workouts.date, cutoff7Str)));
 
   const workouts30 = await db
     .select({ id: workouts.id })
     .from(workouts)
-    .where(and(eq(workouts.userId, USER_ID), gte(workouts.date, cutoff30Str)));
+    .where(and(eq(workouts.userId, userId), gte(workouts.date, cutoff30Str)));
 
   const workoutsLast7d = workouts7.length;
   const workoutsLast30d = workouts30.length;

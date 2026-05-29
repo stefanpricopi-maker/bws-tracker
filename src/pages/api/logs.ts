@@ -1,13 +1,15 @@
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../lib/apiAuth';
 import { db } from '../../db';
 import { dailyLogs } from '../../db/schema';
 import { eq, and, gte, desc } from 'drizzle-orm';
 
-// Hardcoded to user 1 until auth is introduced in a later phase
-const USER_ID = 1;
 
 // ── GET /api/logs?days=30 ──────────────────────────────────────────────────
-export const GET: APIRoute = async ({ url }) => {
+export const GET: APIRoute = async ({ request, url }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   // ?limit=N returns the N most recent rows regardless of date range (used by PhotoVault)
   const limitParam = url.searchParams.get('limit');
   if (limitParam) {
@@ -15,7 +17,7 @@ export const GET: APIRoute = async ({ url }) => {
     const rows = await db
       .select()
       .from(dailyLogs)
-      .where(eq(dailyLogs.userId, USER_ID))
+      .where(eq(dailyLogs.userId, userId))
       .orderBy(desc(dailyLogs.date))
       .limit(limit);
     return new Response(JSON.stringify(rows.map(toClientRow)), {
@@ -31,7 +33,7 @@ export const GET: APIRoute = async ({ url }) => {
   const rows = await db
     .select()
     .from(dailyLogs)
-    .where(and(eq(dailyLogs.userId, USER_ID), gte(dailyLogs.date, cutoffStr)))
+    .where(and(eq(dailyLogs.userId, userId), gte(dailyLogs.date, cutoffStr)))
     .orderBy(desc(dailyLogs.date));
 
   return new Response(JSON.stringify(rows.map(toClientRow)), {
@@ -60,6 +62,9 @@ function toClientRow(r: typeof dailyLogs.$inferSelect) {
 // Body (all fields optional except date):
 //   { date, weight_kg, steps, calories_in, protein_g, carbs_g, fat_g }
 export const POST: APIRoute = async ({ request }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -85,7 +90,7 @@ export const POST: APIRoute = async ({ request }) => {
   const [existing] = await db
     .select({ id: dailyLogs.id })
     .from(dailyLogs)
-    .where(and(eq(dailyLogs.userId, USER_ID), eq(dailyLogs.date, date)))
+    .where(and(eq(dailyLogs.userId, userId), eq(dailyLogs.date, date)))
     .limit(1);
 
   if (existing) {
@@ -94,14 +99,14 @@ export const POST: APIRoute = async ({ request }) => {
       .where(eq(dailyLogs.id, existing.id));
   } else {
     await db.insert(dailyLogs)
-      .values({ userId: USER_ID, date, ...patch });
+      .values({ userId: userId, date, ...patch });
   }
 
   // Return the updated row
   const [updated] = await db
     .select()
     .from(dailyLogs)
-    .where(and(eq(dailyLogs.userId, USER_ID), eq(dailyLogs.date, date)))
+    .where(and(eq(dailyLogs.userId, userId), eq(dailyLogs.date, date)))
     .limit(1);
 
   return new Response(JSON.stringify(updated), {

@@ -1,12 +1,16 @@
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../lib/apiAuth';
 import { db } from '../../db';
-import { users, userGoals, type NewUserGoals } from '../../db/schema';
+import { users, userGoals, googleTokens, type NewUserGoals } from '../../db/schema';
+import { isAuthEnabled } from '../../lib/auth';
 import { eq } from 'drizzle-orm';
 
-const USER_ID = 1;
 
-export const GET: APIRoute = async () => {
-  const [user] = await db.select().from(users).where(eq(users.id, USER_ID)).limit(1);
+export const GET: APIRoute = async ({ request }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
+  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user) {
     return new Response(JSON.stringify({ error: 'User not found' }), {
       status: 404,
@@ -14,11 +18,17 @@ export const GET: APIRoute = async () => {
     });
   }
 
-  const [goals = null] = await db.select().from(userGoals).where(eq(userGoals.userId, USER_ID)).limit(1);
+  const [goals = null] = await db.select().from(userGoals).where(eq(userGoals.userId, userId)).limit(1);
+  const [gfit] = await db.select().from(googleTokens).where(eq(googleTokens.userId, userId)).limit(1);
 
   const payload = {
     name: user.name,
     createdAt: user.createdAt,
+    authEnabled: isAuthEnabled(),
+    googleFit: {
+      connected: !!gfit?.refreshToken || !!gfit?.accessToken,
+      hasRefreshToken: !!gfit?.refreshToken,
+    },
     goals: goals
       ? {
           targetWeightKg: goals.targetWeightKg,
@@ -40,14 +50,17 @@ export const GET: APIRoute = async () => {
 };
 
 export const POST: APIRoute = async ({ request }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   const body = (await request.json()) as Partial<NewUserGoals> & { name?: string };
 
   if (body.name !== undefined) {
-    await db.update(users).set({ name: body.name }).where(eq(users.id, USER_ID));
+    await db.update(users).set({ name: body.name }).where(eq(users.id, userId));
   }
 
   const insertValues: NewUserGoals = {
-    userId: USER_ID,
+    userId: userId,
     targetWeightKg: body.targetWeightKg ?? null,
     weeklyWeightLossKg: body.weeklyWeightLossKg ?? 0.5,
     tdeeKcal: body.tdeeKcal ?? null,

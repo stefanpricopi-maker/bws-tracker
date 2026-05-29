@@ -200,6 +200,30 @@ export const CAL_MIN  = 1200;
 export const CAL_MAX  = 1850;
 export const STEP_MIN = 10_000;
 
+export interface HeatmapThresholds {
+  calMin:  number;
+  calMax:  number;
+  stepMin: number;
+}
+
+export function heatmapThresholdsFromGoals(
+  goals: { targetCaloriesKcal?: number | null; targetSteps?: number | null } | null,
+): HeatmapThresholds {
+  const targetCal =
+    goals?.targetCaloriesKcal != null && goals.targetCaloriesKcal > 0
+      ? goals.targetCaloriesKcal
+      : CAL_MAX;
+  const stepMin =
+    goals?.targetSteps != null && goals.targetSteps > 0
+      ? goals.targetSteps
+      : STEP_MIN;
+  return {
+    calMin: Math.max(800, targetCal - 150),
+    calMax: targetCal + 100,
+    stepMin,
+  };
+}
+
 export type DayStatus = 'ideal' | 'active' | 'surplus' | 'empty';
 
 export interface DayData {
@@ -208,13 +232,14 @@ export interface DayData {
   steps:    number | null;
 }
 
-export function classifyDay(d: DayData): DayStatus {
+export function classifyDay(d: DayData, thresholds?: HeatmapThresholds): DayStatus {
+  const t = thresholds ?? { calMin: CAL_MIN, calMax: CAL_MAX, stepMin: STEP_MIN };
   const hasCalories = d.calories !== null && d.calories > 0;
   const hasSteps    = d.steps    !== null;
 
-  const inDeficit = hasCalories && d.calories! >= CAL_MIN && d.calories! <= CAL_MAX;
-  const hitSteps  = hasSteps && d.steps! >= STEP_MIN;
-  const surplus   = hasCalories && d.calories! > CAL_MAX;
+  const inDeficit = hasCalories && d.calories! >= t.calMin && d.calories! <= t.calMax;
+  const hitSteps  = hasSteps && d.steps! >= t.stepMin;
+  const surplus   = hasCalories && d.calories! > t.calMax;
 
   if (inDeficit && hitSteps) return 'ideal';
   if (hitSteps)              return 'active';

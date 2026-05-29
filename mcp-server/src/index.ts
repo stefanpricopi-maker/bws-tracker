@@ -99,10 +99,44 @@ function getExerciseHistory(exerciseName: string) {
     sessions[row.date].push({ set: row.set_number, weight: row.weight, reps: row.reps });
   }
 
+  const BAND_LABELS: Record<number, string> = { 1: 'Light', 2: 'Medium', 3: 'Heavy' };
+  function isBanded(name: string) {
+    const n = name.toLowerCase();
+    return n.includes('banded') || n.includes(' band ');
+  }
+  function fmtLoad(name: string, w: number) {
+    return isBanded(name) ? (BAND_LABELS[Math.round(w)] ?? `L${w}`) : `${w} kg`;
+  }
+
   return Object.entries(sessions).map(([date, sets]) => {
     const topSet = sets.reduce((best, s) => (s.weight > best.weight ? s : best), sets[0]);
-    return { date, sets, topSet };
+    return {
+      date,
+      sets,
+      topSet: { ...topSet, loadLabel: fmtLoad(exerciseName, topSet.weight) },
+    };
   });
+}
+
+function getMesocycleStatus() {
+  interface MesoRow extends Row {
+    current_block: number;
+    block_start_date: string;
+  }
+  const [row] = query<MesoRow>(
+    `SELECT current_block, block_start_date FROM mesocycles WHERE user_id = 1 LIMIT 1`,
+    [],
+  );
+  if (!row) return { currentBlock: 1, weeksElapsed: 0, isDeloadWeek: false };
+  const start = new Date(row.block_start_date).getTime();
+  const weeks = Math.floor((Date.now() - start) / (7 * 24 * 60 * 60 * 1000));
+  return {
+    currentBlock: row.current_block,
+    weeksElapsed: weeks,
+    displayWeek: Math.min(weeks + 1, 8),
+    isDeloadWeek: weeks >= 7 && weeks < 8,
+    mesocycleComplete: weeks >= 8,
+  };
 }
 
 // ── Helper: ISO week bounds (Monday–Sunday) ────────────────────────────────
@@ -340,7 +374,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'get_overload_report',
       description:
-        'Returns a week-by-week progressive overload report for a specific exercise: total volume, top set weight/reps per week, ordered oldest→newest, plus an overall trend (improving/stalling/declining).',
+        'Returns a week-by-week progressive overload report for a specific exercise: total volume, top set weight/reps per week, ordered oldest→newest, plus an overall trend (improving/stalling/declining). Band exercises use loadLabel (Light/Medium/Heavy).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -351,6 +385,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         },
         required: ['exercise_name'],
       },
+    },
+    {
+      name: 'get_mesocycle_status',
+      description:
+        'Returns current mesocycle block, week number, deload week flag, and completion status from the mesocycles table.',
+      inputSchema: { type: 'object', properties: {} },
     },
   ],
 }));
@@ -384,6 +424,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error('exercise_name is required');
       }
       const data = getOverloadReport(args.exercise_name);
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    }
+
+    if (name === 'get_mesocycle_status') {
+      const data = getMesocycleStatus();
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
     }
 

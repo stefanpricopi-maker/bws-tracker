@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../lib/apiAuth';
 import { db } from '../../db';
 import { userGoals } from '../../db/schema';
 import { eq } from 'drizzle-orm';
@@ -7,7 +8,6 @@ const BASE_URL = process.env['AI_API_BASE_URL'] ?? 'https://api.openai.com/v1';
 const API_KEY  = process.env['AI_API_KEY'];
 const MODEL    = process.env['AI_MODEL'] ?? 'gpt-4o';
 
-const USER_ID = 1;
 
 // ── JSON schema description sent to the LLM ───────────────────────────────────
 const SCHEMA = `{
@@ -42,7 +42,10 @@ ${SCHEMA}
 All numbers must be rounded to 1 decimal place. Verify that daily_totals matches the sum of all meals before responding.`;
 }
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ request }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   if (!API_KEY) {
     return new Response(
       JSON.stringify({ error: 'AI_API_KEY is not configured.' }),
@@ -54,7 +57,7 @@ export const GET: APIRoute = async () => {
   const [goals = null] = await db
     .select()
     .from(userGoals)
-    .where(eq(userGoals.userId, USER_ID))
+    .where(eq(userGoals.userId, userId))
     .limit(1);
 
   const targets = {

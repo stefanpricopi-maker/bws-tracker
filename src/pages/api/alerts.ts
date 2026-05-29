@@ -1,9 +1,9 @@
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../lib/apiAuth';
 import { db } from '../../db';
 import { dailyLogs, workouts, userGoals } from '../../db/schema';
 import { eq, and, gte, desc } from 'drizzle-orm';
 
-const USER_ID = 1;
 
 interface Alert {
   id: string;
@@ -12,10 +12,13 @@ interface Alert {
   message: string;
 }
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ request }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   const now = new Date();
 
-  const [goals = null] = await db.select().from(userGoals).where(eq(userGoals.userId, USER_ID)).limit(1);
+  const [goals = null] = await db.select().from(userGoals).where(eq(userGoals.userId, userId)).limit(1);
   const targetCalories = goals?.targetCaloriesKcal ?? 1850;
   const targetSteps = goals?.targetSteps ?? 10000;
 
@@ -27,13 +30,13 @@ export const GET: APIRoute = async () => {
   const logs7 = await db
     .select()
     .from(dailyLogs)
-    .where(and(eq(dailyLogs.userId, USER_ID), gte(dailyLogs.date, cutoff7Str)))
+    .where(and(eq(dailyLogs.userId, userId), gte(dailyLogs.date, cutoff7Str)))
     .orderBy(desc(dailyLogs.date));
 
   const workouts7 = await db
     .select()
     .from(workouts)
-    .where(and(eq(workouts.userId, USER_ID), gte(workouts.date, cutoff7Str)))
+    .where(and(eq(workouts.userId, userId), gte(workouts.date, cutoff7Str)))
     .orderBy(desc(workouts.date));
 
   const alerts: Alert[] = [];

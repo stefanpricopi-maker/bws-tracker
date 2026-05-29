@@ -1,12 +1,15 @@
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../lib/apiAuth';
 import { fetchWorkoutSessions } from '../../lib/googleFit';
 import { db } from '../../db';
 import { googleTokens } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 
-const USER_ID = 1;
 
-export const GET: APIRoute = async ({ url }) => {
+export const GET: APIRoute = async ({ request, url }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   // Accept ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD (endDate optional)
   const startDate = url.searchParams.get('startDate')
     ?? new Date().toISOString().slice(0, 10);
@@ -16,7 +19,7 @@ export const GET: APIRoute = async ({ url }) => {
     const [stored] = await db
       .select()
       .from(googleTokens)
-      .where(eq(googleTokens.userId, USER_ID))
+      .where(eq(googleTokens.userId, userId))
       .limit(1);
 
     if (!stored) {

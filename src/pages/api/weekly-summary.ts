@@ -1,9 +1,9 @@
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../lib/apiAuth';
 import { db } from '../../db';
 import { dailyLogs, workouts, workoutSets, userGoals } from '../../db/schema';
 import { eq, and, gte, lte, desc } from 'drizzle-orm';
 
-const USER_ID = 1;
 
 function isoWeekBounds(date: Date): { weekStart: string; weekEnd: string } {
   const d = new Date(date);
@@ -46,7 +46,10 @@ function volumeByExercise(sets: SetRow[]): Map<string, number> {
   return map;
 }
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ request }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   const now = new Date();
   const { weekStart, weekEnd } = isoWeekBounds(now);
 
@@ -58,7 +61,7 @@ export const GET: APIRoute = async () => {
   const prevWeekStart = prevMonday.toISOString().slice(0, 10);
   const prevWeekEnd = prevSunday.toISOString().slice(0, 10);
 
-  const [goals = null] = await db.select().from(userGoals).where(eq(userGoals.userId, USER_ID)).limit(1);
+  const [goals = null] = await db.select().from(userGoals).where(eq(userGoals.userId, userId)).limit(1);
   const targetCalories = goals?.targetCaloriesKcal ?? 1850;
   const targetProtein = goals?.targetProteinG ?? 180;
 
@@ -68,7 +71,7 @@ export const GET: APIRoute = async () => {
     .from(dailyLogs)
     .where(
       and(
-        eq(dailyLogs.userId, USER_ID),
+        eq(dailyLogs.userId, userId),
         gte(dailyLogs.date, weekStart),
         lte(dailyLogs.date, weekEnd),
       ),
@@ -89,7 +92,7 @@ export const GET: APIRoute = async () => {
       .from(dailyLogs)
       .where(
         and(
-          eq(dailyLogs.userId, USER_ID),
+          eq(dailyLogs.userId, userId),
           gte(dailyLogs.date, prevWeekStart),
           lte(dailyLogs.date, prevWeekEnd),
         ),
@@ -107,7 +110,7 @@ export const GET: APIRoute = async () => {
     .from(workouts)
     .where(
       and(
-        eq(workouts.userId, USER_ID),
+        eq(workouts.userId, userId),
         gte(workouts.date, weekStart),
         lte(workouts.date, weekEnd),
       ),
@@ -140,7 +143,7 @@ export const GET: APIRoute = async () => {
     .from(workouts)
     .where(
       and(
-        eq(workouts.userId, USER_ID),
+        eq(workouts.userId, userId),
         gte(workouts.date, prevWeekStart),
         lte(workouts.date, prevWeekEnd),
       ),

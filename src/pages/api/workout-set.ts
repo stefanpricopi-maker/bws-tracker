@@ -3,14 +3,17 @@
  * DELETE /api/workout-set?workout_id=N — remove incomplete session (quit mid-workout).
  */
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../lib/apiAuth';
 import { db } from '../../db';
 import { workouts, workoutSets } from '../../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { validateSetPayload } from '../../lib/workoutValidation';
 
-const USER_ID = 1;
 
 export const POST: APIRoute = async ({ request }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   try {
     const body = await request.json() as Record<string, unknown>;
 
@@ -37,14 +40,14 @@ export const POST: APIRoute = async ({ request }) => {
       const today   = new Date().toISOString().slice(0, 10);
       const [created] = await db
         .insert(workouts)
-        .values({ userId: USER_ID, date: today, dayType })
+        .values({ userId: userId, date: today, dayType })
         .returning({ id: workouts.id });
       workoutId = created.id;
     } else {
       const [existing] = await db
         .select({ id: workouts.id })
         .from(workouts)
-        .where(and(eq(workouts.id, workoutId), eq(workouts.userId, USER_ID)))
+        .where(and(eq(workouts.id, workoutId), eq(workouts.userId, userId)))
         .limit(1);
       if (!existing) {
         return new Response(
@@ -54,12 +57,21 @@ export const POST: APIRoute = async ({ request }) => {
       }
     }
 
+    const rpeRaw = body.rpe;
+    const rpeVal =
+      typeof rpeRaw === 'number' && rpeRaw >= 1 && rpeRaw <= 10
+        ? rpeRaw
+        : typeof rpeRaw === 'string' && rpeRaw !== ''
+          ? Number(rpeRaw)
+          : null;
+
     await db.insert(workoutSets).values({
       workoutId,
       exerciseName,
       weight,
       reps,
       setNumber,
+      rpe: rpeVal != null && rpeVal >= 1 && rpeVal <= 10 ? rpeVal : null,
     });
 
     return new Response(
@@ -76,7 +88,10 @@ export const POST: APIRoute = async ({ request }) => {
 };
 
 /** Delete a partial workout so it does not pollute auto-regulation history. */
-export const DELETE: APIRoute = async ({ url }) => {
+export const DELETE: APIRoute = async ({ request, url }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   const workoutId = parseInt(url.searchParams.get('workout_id') ?? '', 10);
   if (!Number.isInteger(workoutId) || workoutId < 1) {
     return new Response(JSON.stringify({ error: 'workout_id query param required.' }), {
@@ -88,7 +103,7 @@ export const DELETE: APIRoute = async ({ url }) => {
   const [row] = await db
     .select({ id: workouts.id })
     .from(workouts)
-    .where(and(eq(workouts.id, workoutId), eq(workouts.userId, USER_ID)))
+    .where(and(eq(workouts.id, workoutId), eq(workouts.userId, userId)))
     .limit(1);
 
   if (!row) {

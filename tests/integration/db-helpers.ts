@@ -50,7 +50,24 @@ export async function initSchema(client: ReturnType<typeof createClient>) {
       exercise_name TEXT    NOT NULL,
       weight        REAL    NOT NULL,
       reps          INTEGER NOT NULL,
-      set_number    INTEGER NOT NULL
+      set_number    INTEGER NOT NULL,
+      rpe           REAL
+    );
+
+    CREATE TABLE IF NOT EXISTS mesocycles (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id          INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      current_block    INTEGER NOT NULL DEFAULT 1,
+      block_start_date TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      updated_at       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS block_history (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      block      INTEGER NOT NULL,
+      started_at TEXT    NOT NULL,
+      ended_at   TEXT
     );
 
     CREATE TABLE IF NOT EXISTS user_goals (

@@ -1,14 +1,18 @@
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../lib/apiAuth';
 import { db } from '../../db';
-import { exercises } from '../../db/schema';
+import { exercises, mesocycles } from '../../db/schema';
 import { eq } from 'drizzle-orm';
-
+import { isDeloadWeek, deloadSetCount, weeksElapsed } from '../../lib/periodization';
 const BASE_URL = process.env['AI_API_BASE_URL'] ?? 'https://api.openai.com/v1';
 const API_KEY  = process.env['AI_API_KEY'];
 const MODEL    = process.env['AI_MODEL'] ?? 'gpt-4o';
 
-// The LLM must pick exercises ONLY from this pool — no hallucination allowed.
-const SYSTEM_PROMPT = `You are a strict Built With Science fitness coach.
+function systemPrompt(isDeload: boolean): string {
+  const volumeNote = isDeload
+    ? `\nIMPORTANT: This is MESOCYCLE DELOAD WEEK. Reduce every exercise to ~60% of normal sets (e.g. 3→2, 4→2). Keep the same exercises.`
+    : '';
+  return `You are a strict Built With Science fitness coach.
 Your job is to create a personalised weekly workout split for a home-gym athlete (dumbbells and resistance bands only).
 You will be given the user's full exercise library as a JSON array.
 You MUST only use exercise names that appear EXACTLY in the provided list — do not invent, rename, or paraphrase any exercise.
@@ -19,7 +23,7 @@ Volume rules (apply per exercise):
 - Secondary compound: 3 sets
 - Isolation for large muscles (back, chest, quads, hamstrings): 3 sets
 - Isolation for small muscles (biceps, triceps, rear delts, calves, lateral delts): 2-3 sets
-- Total weekly sets per muscle group must stay between 10-20 (hypertrophy range).
+- Total weekly sets per muscle group must stay between 10-20 (hypertrophy range).${volumeNote}
 
 Return ONLY a valid JSON object with NO markdown, NO backticks, NO explanation. The schema:
 {
@@ -35,16 +39,24 @@ Return ONLY a valid JSON object with NO markdown, NO backticks, NO explanation. 
   ]
 }
 Each training day must have 5-7 exercises. Rest days must have an empty "exercises" array.`;
+}
 
-function buildUserPrompt(exerciseList: Array<{ name: string; category: string; targetMuscle: string }>): string {
+function buildUserPrompt(
+  exerciseList: Array<{ name: string; category: string; targetMuscle: string }>,
+  isDeload: boolean,
+): string {
+  const deload = isDeload ? ' This is deload week — use fewer sets per exercise.' : '';
   return `Here is the user's full exercise library:
 ${JSON.stringify(exerciseList, null, 2)}
 
 Create a balanced 5-day workout split (Push / Pull / Legs / Upper / Rest) using ONLY the exercises in this list.
-Pick exercises that cover all muscle groups without overlap. Prioritise compound movements first per day.`;
+Pick exercises that cover all muscle groups without overlap. Prioritise compound movements first per day.${deload}`;
 }
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ request }) => {
+  const auth = await requireUser(request, 'generate-weekly-plan', 10);
+  if (auth instanceof Response) return auth;
+
   if (!API_KEY) {
     return new Response(
       JSON.stringify({ error: 'AI_API_KEY is not configured.' }),
@@ -53,7 +65,6 @@ export const GET: APIRoute = async () => {
   }
 
   try {
-    // Fetch every non-archived exercise from the DB
     const rows = await db
       .select({
         name:         exercises.name,
@@ -71,17 +82,25 @@ export const GET: APIRoute = async () => {
       );
     }
 
+    const { userId } = auth;
+    const [meso] = await db
+      .select()
+      .from(mesocycles)
+      .where(eq(mesocycles.userId, userId))
+      .limit(1);
+    const weeks = meso ? weeksElapsed(meso.blockStartDate) : 0;
+    const isDeload = isDeloadWeek(weeks);
+
     const body: Record<string, unknown> = {
       model:       MODEL,
       messages:    [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user',   content: buildUserPrompt(rows) },
+        { role: 'system', content: systemPrompt(isDeload) },
+        { role: 'user',   content: buildUserPrompt(rows, isDeload) },
       ],
       max_tokens:  1200,
       temperature: 0.3,
     };
 
-    // JSON mode for OpenAI-compatible providers
     if (!BASE_URL.includes('anthropic')) {
       body.response_format = { type: 'json_object' };
     }
@@ -112,12 +131,10 @@ export const GET: APIRoute = async () => {
       throw new Error(`Model returned non-JSON: ${raw.slice(0, 300)}`);
     }
 
-    // Validate that every exercise name in the plan exists in our DB pool.
-    // Also enforce sets is a sane integer (2–5). Guards against hallucination.
     const validNames = new Set(rows.map((r) => r.name));
     type PlanExercise = { name: string; sets: number };
     type PlanDay = { day_name: string; category: string; exercises: PlanExercise[] };
-    const typed = plan as { split_type?: string; days?: PlanDay[] };
+    const typed = plan as { split_type?: string; days?: PlanDay[]; isDeloadWeek?: boolean };
     if (typed?.days) {
       for (const day of typed.days) {
         if (!Array.isArray(day.exercises)) { day.exercises = []; continue; }
@@ -130,15 +147,17 @@ export const GET: APIRoute = async () => {
             }
             return true;
           })
-          .map((ex) => ({
-            name: ex.name,
-            sets: Math.min(5, Math.max(2, Math.round(Number(ex.sets) || 3))),
-          }));
+          .map((ex) => {
+            let sets = Math.min(5, Math.max(2, Math.round(Number(ex.sets) || 3)));
+            if (isDeload) sets = deloadSetCount(sets);
+            return { name: ex.name, sets };
+          });
       }
     }
+    typed.isDeloadWeek = isDeload;
 
     return new Response(
-      JSON.stringify({ plan }),
+      JSON.stringify({ plan: typed }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     );
   } catch (err) {

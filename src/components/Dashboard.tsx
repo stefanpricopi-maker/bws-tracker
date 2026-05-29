@@ -16,6 +16,7 @@ import type { PlannedExercise } from './WorkoutPlayer';
 import DailyActionHero      from './DailyActionHero';
 import PullToRefresh        from './PullToRefresh';
 import Onboarding, { needsOnboarding, markOnboardingDone, clearOnboarding } from './Onboarding';
+import { getStoredLocale, t } from '../lib/i18n';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
@@ -135,6 +136,8 @@ interface PlayerState {
 
 export default function Dashboard() {
   const [active, setActive]         = useState<Tab>('dashboard');
+  const [locale, setLocale] = useState<'en' | 'ro'>('en');
+  useEffect(() => { setLocale(getStoredLocale()); }, []);
   const [googleAuthMsg, setGoogleAuthMsg] = useState<{ text: string; color: string } | null>(null);
   const [player, setPlayer]         = useState<PlayerState | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -234,7 +237,7 @@ export default function Dashboard() {
                         ${active === id ? 'text-violet-400' : 'text-gray-500 hover:text-gray-300'}`}
           >
             <span className="text-xl leading-none">{icon}</span>
-            <span>{label}</span>
+            <span>{t(`nav_${id}`, locale) || label}</span>
           </button>
         ))}
       </nav>

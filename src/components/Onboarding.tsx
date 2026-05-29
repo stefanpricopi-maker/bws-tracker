@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { calculateTdeeFromWeight } from '../lib/tdee';
 
 const STORAGE_KEY = 'bws_onboarding_v1';
 
@@ -56,19 +57,35 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     setForm((f) => ({ ...f, [field]: value }));
   }
 
+  function applyTdeeFromCurrentWeight() {
+    const w = Number(form.currentWeight);
+    if (!w || w < 30) return;
+    const t = calculateTdeeFromWeight({ weightKg: w, weeklyLossKg: 0.5 });
+    setForm((f) => ({
+      ...f,
+      targetCalories: String(t.targetCalories),
+      targetProtein:  String(t.targetProtein),
+    }));
+  }
+
   async function handleFinish() {
     setSaving(true);
     setError(null);
     const today = new Date().toISOString().slice(0, 10);
     try {
+      const w = Number(form.currentWeight);
+      const t = w >= 30 ? calculateTdeeFromWeight({ weightKg: w, weeklyLossKg: 0.5 }) : null;
       await fetch('/api/profile', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name:               form.name.trim() || 'Athlete',
           targetWeightKg:     form.targetWeight  ? Number(form.targetWeight)  : null,
-          targetCaloriesKcal: Number(form.targetCalories) || 1850,
-          targetProteinG:     Number(form.targetProtein)  || 180,
+          tdeeKcal:           t?.tdeeKcal ?? null,
+          targetCaloriesKcal: Number(form.targetCalories) || t?.targetCalories || 1850,
+          targetProteinG:     Number(form.targetProtein)  || t?.targetProtein || 180,
+          targetCarbsG:       t?.targetCarbs ?? 113,
+          targetFatG:         t?.targetFat ?? 75,
           targetSteps:        10000,
           weeklyWeightLossKg: 0.5,
         }),
@@ -267,7 +284,10 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             <button
               type="button"
               disabled={!canAdvance()}
-              onClick={() => setStep((s) => s + 1)}
+              onClick={() => {
+                if (step === 1) applyTdeeFromCurrentWeight();
+                setStep((s) => s + 1);
+              }}
               className="flex-1 py-3 rounded-xl text-sm font-bold bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Continue

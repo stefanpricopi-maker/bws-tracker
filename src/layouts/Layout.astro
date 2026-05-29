@@ -24,6 +24,12 @@ const { title = 'BWS Tracker' } = Astro.props;
   </head>
 
   <body class="bg-gray-900 text-white">
+    <script is:inline>
+      try {
+        const t = localStorage.getItem('bws_theme');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch (_) {}
+    </script>
     <!--
       Mobile shell: centered column, max 28rem wide, full viewport height.
       On larger screens this creates the "phone on desktop" effect.

@@ -1,11 +1,11 @@
 import type { APIRoute } from 'astro';
+import { resolveUserId, DEFAULT_USER_ID } from '../../../../lib/auth';
 import { getTokens } from '../../../../lib/googleFit';
 import { db } from '../../../../db';
 import { googleTokens } from '../../../../db/schema';
 
-const USER_ID = 1; // replaced by real auth in a later phase
-
-export const GET: APIRoute = async ({ url }) => {
+export const GET: APIRoute = async ({ request, url }) => {
+  const userId = (await resolveUserId(request)) ?? DEFAULT_USER_ID;
   const code  = url.searchParams.get('code');
   const error = url.searchParams.get('error');
 
@@ -19,7 +19,7 @@ export const GET: APIRoute = async ({ url }) => {
     if (!tokens.access_token) throw new Error('No access token returned');
 
     await db.insert(googleTokens).values({
-      userId: USER_ID,
+      userId,
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token ?? null,
       expiryDate: tokens.expiry_date ?? null,

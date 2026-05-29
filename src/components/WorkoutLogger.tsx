@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { autoRegulate as autoRegulateCalc, calcDeloadWeight, weightIncrementKg } from '../lib/fitness';
 import { getExerciseForBlock, EXERCISE_SWAP, MESOCYCLE_WEEKS, deloadSetCount } from '../lib/periodization';
-import { isBandedExercise, formatExerciseLoad } from '../lib/exerciseKind';
+import { isBandedExercise, formatExerciseLoad, formatBandLevel } from '../lib/exerciseKind';
 import type { PlannedExercise } from './WorkoutPlayer';
 import ExerciseManager from './ExerciseManager';
 
@@ -242,6 +242,8 @@ interface MesocycleStatus {
   mesocycleComplete: boolean;
   isDeloadWeek?:     boolean;
   displayWeek?:      number;
+  suggestBlockAdvance?: boolean;
+  blockHistory?:     Array<{ block: number; startedAt: string; endedAt: string | null }>;
 }
 
 interface WorkoutLoggerProps {
@@ -680,6 +682,20 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
         </div>
       )}
 
+      {meso?.blockHistory && meso.blockHistory.length > 0 && (
+        <details className="rounded-xl bg-gray-800/40 border border-gray-700/50 px-3 py-2">
+          <summary className="text-xs text-gray-400 cursor-pointer">Mesocycle history</summary>
+          <ul className="mt-2 space-y-1 text-[11px] text-gray-500">
+            {meso.blockHistory.map((h) => (
+              <li key={`${h.block}-${h.startedAt}`}>
+                Block {h.block} · {h.startedAt.slice(0, 10)}
+                {h.endedAt ? ` → ${h.endedAt.slice(0, 10)}` : ''}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       {meso && !meso.mesocycleComplete && (
         <div className="flex items-center gap-2 px-1">
           <span className="text-xs text-gray-500">
@@ -1022,7 +1038,9 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                   {/* Phase 12: weight-increase indicator (only when no deload) */}
                   {ex.isWeightIncrease && !ex.needsDeload && !medMode && (
                     <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/30">
-                      ⬆️ +{weightIncrementKg(ex.name)} kg
+                      {isBandedExercise(ex.name) && ex.targetWeight != null
+                        ? `⬆️ ${formatBandLevel(ex.targetWeight)}`
+                        : `⬆️ +${weightIncrementKg(ex.name)} kg`}
                     </span>
                   )}
                   {badge && (

@@ -1,14 +1,17 @@
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../lib/apiAuth';
 import { db } from '../../db';
 import { workouts, workoutSets } from '../../db/schema';
 import { eq, desc, and } from 'drizzle-orm';
 import { detectDeload } from '../../lib/fitness';
 import { validateBulkSetRow } from '../../lib/workoutValidation';
 
-const USER_ID = 1;
 
 // ── GET /api/workouts?exercise_name=Bench+Press ────────────────────────────
-export const GET: APIRoute = async ({ url }) => {
+export const GET: APIRoute = async ({ request, url }) => {
+  const auth = await requireUser(request, 'workouts');
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   const exerciseName = url.searchParams.get('exercise_name');
 
   if (!exerciseName) {
@@ -23,7 +26,7 @@ export const GET: APIRoute = async ({ url }) => {
     .selectDistinct({ workoutId: workoutSets.workoutId, date: workouts.date })
     .from(workoutSets)
     .innerJoin(workouts, eq(workoutSets.workoutId, workouts.id))
-    .where(and(eq(workouts.userId, USER_ID), eq(workoutSets.exerciseName, exerciseName)))
+    .where(and(eq(workouts.userId, userId), eq(workoutSets.exerciseName, exerciseName)))
     .orderBy(desc(workouts.date))
     .limit(3);
 
@@ -78,6 +81,9 @@ export const GET: APIRoute = async ({ url }) => {
 // ── POST /api/workouts ─────────────────────────────────────────────────────
 // Body: { date: string, dayType: string, sets: Array<{ exerciseName, weight, reps, setNumber }> }
 export const POST: APIRoute = async ({ request }) => {
+  const auth = await requireUser(request, 'workouts');
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -94,7 +100,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   const [inserted] = await db
     .insert(workouts)
-    .values({ userId: USER_ID, date, dayType })
+    .values({ userId: userId, date, dayType })
     .returning({ id: workouts.id });
 
   const workoutId = inserted.id;

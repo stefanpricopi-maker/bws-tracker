@@ -59,16 +59,17 @@ npm run db:studio     # Drizzle Studio GUI
 
 ## Environment Variables
 
+See [`.env.example`](./.env.example) for the full list. Key vars:
+
 | Variable | Description |
 |---|---|
 | `DATABASE_URL` | `file:./bws.db` locally, `libsql://...turso.io` in production |
-| `DATABASE_AUTH_TOKEN` | Turso auth token (not needed for local file) |
-| `GOOGLE_CLIENT_ID` | Google Cloud OAuth2 client ID |
-| `GOOGLE_CLIENT_SECRET` | Google Cloud OAuth2 client secret |
-| `GOOGLE_REDIRECT_URI` | OAuth2 callback URL |
+| `BWS_AUTH_SECRET` | Optional — enables password login (see Profile) |
+| `BWS_LOGIN_PASSWORD` | App password when auth is enabled |
 | `AI_API_KEY` | Groq / OpenAI API key |
-| `AI_API_BASE_URL` | API base URL (default: `https://api.groq.com/openai/v1`) |
-| `AI_MODEL` | Model name (default: `llama-3.1-8b-instant`) |
+| `GOOGLE_CLIENT_*` | Google Fit OAuth |
+
+Staging: [docs/STAGING.md](./docs/STAGING.md)
 
 ## MCP Server (Cursor Integration)
 

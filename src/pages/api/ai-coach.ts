@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../lib/apiAuth';
 import { db } from '../../db';
 import { dailyLogs } from '../../db/schema';
 import { eq, gte, desc } from 'drizzle-orm';
@@ -8,7 +9,6 @@ const BASE_URL = process.env['AI_API_BASE_URL'] ?? 'https://api.openai.com/v1';
 const API_KEY  = process.env['AI_API_KEY'];
 const MODEL    = process.env['AI_MODEL'] ?? 'gpt-4o';
 
-const USER_ID = 1;
 
 // ── Built-With-Science system prompt ─────────────────────────────────────────
 
@@ -55,7 +55,10 @@ Keep the response under 3 sentences. Be direct, no fluff. Do not repeat the numb
 
 // ── Route ─────────────────────────────────────────────────────────────────────
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ request }) => {
+  const auth = await requireUser(request, 'ai-coach');
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   if (!API_KEY) {
     return new Response(
       JSON.stringify({ error: 'AI_API_KEY is not configured. Add it to your .env file.' }),
@@ -76,7 +79,7 @@ export const GET: APIRoute = async () => {
       steps:     dailyLogs.steps,
     })
     .from(dailyLogs)
-    .where(eq(dailyLogs.userId, USER_ID))
+    .where(eq(dailyLogs.userId, userId))
     .orderBy(desc(dailyLogs.date));
 
   // Build a full 7-day window, filling missing dates with nulls

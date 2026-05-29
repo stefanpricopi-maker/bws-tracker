@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { clearOnboarding } from './Onboarding';
 import { proteinGramsForWeight, macrosFromCaloriesAndProtein } from '../lib/macroTargets';
+import { calculateTdeeFromWeight } from '../lib/tdee';
+import AppPreferences from './AppPreferences';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -138,7 +140,6 @@ export default function ProfileSettings({ onReplayOnboarding }: ProfileSettingsP
       .finally(() => setLoading(false));
   }, []);
 
-  // TDEE calculation (Mifflin-St Jeor)
   function calculateTDEE() {
     const w = parseFloat(calcWeight);
     const h = parseFloat(calcHeight);
@@ -146,23 +147,19 @@ export default function ProfileSettings({ onReplayOnboarding }: ProfileSettingsP
     const act = parseFloat(calcActivity);
     if (!w || !h || !a) return;
 
-    const bmr =
-      calcSex === 'male'
-        ? 10 * w + 6.25 * h - 5 * a + 5
-        : 10 * w + 6.25 * h - 5 * a - 161;
-
-    const tdee = Math.round(bmr * act);
-    setTdeeKcal(String(tdee));
-
-    const loss = parseFloat(weeklyLoss) || 0.5;
-    const targetCal = Math.max(1200, tdee - Math.round((loss * 1000) / 7));
-    setTargetCalories(String(targetCal));
-
-    const proteinG = proteinGramsForWeight(w);
-    setTargetProtein(String(proteinG));
-    const { carbsG, fatG } = macrosFromCaloriesAndProtein(targetCal, proteinG);
-    setTargetCarbs(String(carbsG));
-    setTargetFat(String(fatG));
+    const t = calculateTdeeFromWeight({
+      weightKg: w,
+      heightCm: h,
+      ageYears: a,
+      sex: calcSex,
+      activityFactor: act,
+      weeklyLossKg: parseFloat(weeklyLoss) || 0.5,
+    });
+    setTdeeKcal(String(t.tdeeKcal));
+    setTargetCalories(String(t.targetCalories));
+    setTargetProtein(String(t.targetProtein));
+    setTargetCarbs(String(t.targetCarbs));
+    setTargetFat(String(t.targetFat));
   }
 
   async function handleSave() {
@@ -414,11 +411,10 @@ export default function ProfileSettings({ onReplayOnboarding }: ProfileSettingsP
           {saving ? 'Saving…' : 'Save Goals'}
         </button>
 
+        <AppPreferences />
+
         {onReplayOnboarding && (
-          <SectionCard title="App">
-            <p className="text-xs text-gray-500 mb-3">
-              Re-run the first-launch setup wizard (name, weight, targets).
-            </p>
+          <SectionCard title="Onboarding">
             <button
               type="button"
               onClick={() => {

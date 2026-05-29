@@ -1,9 +1,9 @@
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../lib/apiAuth';
 import { db } from '../../db';
 import { dailyLogs, workouts, users, userGoals } from '../../db/schema';
 import { eq, and } from 'drizzle-orm';
 
-const USER_ID = 1;
 
 const SPLIT_META = [
   { label: 'Day 1 — Push',      dayType: 'Push',      isRest: false },
@@ -23,18 +23,21 @@ function todaySplitIndex() {
   return (new Date().getDay() + 6) % 7;
 }
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ request }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   const date  = todayStr();
   const split = SPLIT_META[todaySplitIndex()];
 
   const [[user], [goals], [log], todayWorkouts] = await Promise.all([
-    db.select().from(users).where(eq(users.id, USER_ID)).limit(1),
-    db.select().from(userGoals).where(eq(userGoals.userId, USER_ID)).limit(1),
+    db.select().from(users).where(eq(users.id, userId)).limit(1),
+    db.select().from(userGoals).where(eq(userGoals.userId, userId)).limit(1),
     db.select().from(dailyLogs)
-      .where(and(eq(dailyLogs.userId, USER_ID), eq(dailyLogs.date, date)))
+      .where(and(eq(dailyLogs.userId, userId), eq(dailyLogs.date, date)))
       .limit(1),
     db.select().from(workouts)
-      .where(and(eq(workouts.userId, USER_ID), eq(workouts.date, date))),
+      .where(and(eq(workouts.userId, userId), eq(workouts.date, date))),
   ]);
 
   const row = log ?? null;

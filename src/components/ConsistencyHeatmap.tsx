@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
-import { classifyDay as classify, calcStreak, CAL_MIN, CAL_MAX, STEP_MIN } from '../lib/fitness';
-import type { DayStatus, DayData } from '../lib/fitness';
+import {
+  classifyDay as classify,
+  calcStreak,
+  heatmapThresholdsFromGoals,
+} from '../lib/fitness';
+import type { DayStatus, DayData, HeatmapThresholds } from '../lib/fitness';
 
 const STATUS_STYLE: Record<DayStatus, { bg: string; label: string }> = {
   ideal:   { bg: 'bg-emerald-500',          label: 'Ideal'   },
@@ -38,13 +42,18 @@ interface LogRow {
 
 export default function ConsistencyHeatmap() {
   const [days, setDays]       = useState<{ date: string; status: DayStatus; data: DayData }[]>([]);
+  const [thresholds, setThresholds] = useState<HeatmapThresholds | null>(null);
   const [loading, setLoading] = useState(true);
   const [tooltip, setTooltip] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/logs?days=30')
-      .then((r) => r.json())
-      .then((rows: LogRow[]) => {
+    Promise.all([
+      fetch('/api/logs?days=30').then((r) => r.json()),
+      fetch('/api/profile').then((r) => r.json()),
+    ])
+      .then(([rows, profile]: [LogRow[], { goals?: { targetCaloriesKcal?: number; targetSteps?: number } }]) => {
+        const t = heatmapThresholdsFromGoals(profile.goals ?? null);
+        setThresholds(t);
         const logMap = new Map(rows.map((r) => [r.date, r]));
         const dates  = buildDateRange(30);
 
@@ -55,7 +64,7 @@ export default function ConsistencyHeatmap() {
             calories: row?.caloriesIn ?? null,
             steps:    row?.steps      ?? null,
           };
-          return { date, status: classify(data), data };
+          return { date, status: classify(data, t), data };
         });
 
         setDays(enriched);
@@ -136,9 +145,9 @@ export default function ConsistencyHeatmap() {
       {/* Legend */}
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-gray-900/60 border border-gray-700/50 px-3 py-2.5">
         {([
-          { bg: 'bg-emerald-500', label: 'Ideal day',    desc: `${CAL_MIN}–${CAL_MAX} kcal + ${STEP_MIN.toLocaleString()} steps` },
-          { bg: 'bg-emerald-300', label: 'Active day',   desc: `${STEP_MIN.toLocaleString()}+ steps only` },
-          { bg: 'bg-red-500',     label: 'Surplus day',  desc: `Calories above ${CAL_MAX}` },
+          { bg: 'bg-emerald-500', label: 'Ideal day',    desc: thresholds ? `${thresholds.calMin}–${thresholds.calMax} kcal + ${thresholds.stepMin.toLocaleString()} steps` : 'On target calories + steps' },
+          { bg: 'bg-emerald-300', label: 'Active day',   desc: thresholds ? `${thresholds.stepMin.toLocaleString()}+ steps only` : 'Steps hit' },
+          { bg: 'bg-red-500',     label: 'Surplus day',  desc: thresholds ? `Calories above ${thresholds.calMax}` : 'Over calorie target' },
           { bg: 'bg-gray-700',    label: 'Missed',        desc: 'No data logged' },
         ] as const).map(({ bg, label, desc }) => (
           <div key={label} className="flex items-start gap-2">

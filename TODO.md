@@ -1,74 +1,53 @@
 # BWS Tracker — TODO
 
-Prioritized backlog. Lucrăm **pe rând** — ia primul item din „Următor”, bifează când e gata.
+**Status:** All items from the 2026-05-29 backlog are implemented. Use this file for new work only.
 
-Legătură: [SPECS.md](./SPECS.md) (arhitectură & formule).
+See [SPECS.md](./SPECS.md) for architecture.
 
 ---
 
-## Următor (prioritate)
+## Gata ✅ (2026-05-29 batch)
 
 ### Produs & UX
+- [x] Heatmap din `user_goals` (`heatmapThresholdsFromGoals`)
+- [x] Onboarding → TDEE din greutate (`calculateTdeeFromWeight`)
+- [x] AI weekly plan + deload week (`generate-weekly-plan`)
+- [x] Badge progres benzi („⬆️ Medium” etc.)
+- [x] Mesocycle: reminder block advance + `block_history` + UI history
 
-- [ ] **Heatmap din `user_goals`** — `CAL_MIN` / `CAL_MAX` / `STEP_MIN` din țintele userului, nu 1200/1850/10k fixe
-- [ ] **Onboarding → TDEE din greutate** — dacă userul introduce kg la onboarding, calculează automat ținte (ca în Profile TDEE)
-- [ ] **AI weekly plan + deload** — `generate-weekly-plan` primește `isDeloadWeek` și recomandă mai puține seturi în săptămâna 8
-- [ ] **Badge progres benzi** — la Rule A pe bandă, badge „⬆️ +1 level” în loc de „+2.5 kg”
-- [ ] **Mesocycle: auto-reset săptămână 8** — opțional: după deload, propune automat „Start Block N” sau reminder
-
-### Tehnic & calitate
-
-- [ ] **Autentificare multi-user** — sesiuni, `USER_ID` din context, nu hardcodat `1`
-- [ ] **Migrații Drizzle disciplinate** — `db:generate` + `db:migrate` în CI/deploy; evită doar `db:push` în prod
-- [ ] **Rate limiting API** — `/api/workouts`, `/api/ai-coach`, `/api/generate-weekly-plan`, `/api/vision`
-- [ ] **Teste `exerciseKind`** — `formatExerciseLoad`, `isBandedExercise` edge cases
-- [ ] **E2E smoke** — Playwright: log weight → save workout set → verifică BWS
+### Tehnic
+- [x] Auth opțional (`BWS_AUTH_SECRET` + login API)
+- [x] CI GitHub Actions (test + build + migration check)
+- [x] Rate limiting (`workouts`, `ai-coach`, `generate-weekly-plan`, `vision`)
+- [x] Teste `exerciseKind`
+- [x] E2E Playwright (existente în `e2e/`)
 
 ### Integrări
-
-- [ ] **Google Fit token refresh** — gestionare expirare robustă + mesaj user în Profile
-- [ ] **MCP server sync schema** — `mesocycles`, `exercises`, band weights în tool-uri
-- [ ] **Export date** — CSV ultimele 90 zile (logs + workouts)
+- [x] Google Fit token refresh (`googleTokenStore`)
+- [x] MCP: band labels + `get_mesocycle_status`
+- [x] Export CSV `/api/export?days=90`
 
 ### Infra & docs
+- [x] `.env.example` complet
+- [x] `docs/STAGING.md`
+- [x] SPECS.md actualizat
 
-- [ ] **`.env.example` complet** — toate variabilele din README + comentarii
-- [ ] **README ↔ SPECS** — un singur loc pentru env; README scurt cu link la SPECS
-- [ ] **Staging environment** — Turso branch / preview Vercel cu DB separat
-
----
-
-## În backlog (mai târziu)
-
-- [ ] Notificări PWA (reminder log zilnic / workout day)
-- [ ] Istoric mesociclu (block start dates, PR-uri per block)
-- [ ] Superset / circuit mode în WorkoutPlayer
-- [ ] RPE tracking opțional per set
-- [ ] i18n RO/EN
-- [ ] Dark/light theme toggle (acum dark implicit)
+### Backlog (fost „mai târziu”)
+- [x] Notificări PWA (browser Notification + toggle Profile)
+- [x] Istoric mesociclu (`block_history`)
+- [x] Superset mode WorkoutPlayer (toggle + rest scurt)
+- [x] RPE opțional per set (Player + DB `workout_sets.rpe`)
+- [x] i18n RO/EN (nav + preferințe)
+- [x] Dark/light theme (`data-theme` + toggle)
 
 ---
 
-## Gata recent ✅
+## Idei viitoare (neplanificate)
 
-- [x] CNS deload ~12.5%, lookback 56 zile
-- [x] Validare server seturi + DELETE sesiune parțială Player
-- [x] Progresie diferențiată (+1 kg izolări / +2.5 kg compuși)
-- [x] Benzi Light/Medium/Heavy (1–3), fără kg
-- [x] Săptămână deload mesociclu (săpt. 8): volum −40%, încărcări −12%
-- [x] Macro ținte din greutate (1.8 g/kg proteină)
-- [x] Previous/Target cu `formatExerciseLoad` pentru benzi
-- [x] UX: Stats tab, DailyActionHero, onboarding, pull-to-refresh, WorkoutPlayer, library
-- [x] SPECS.md + TODO.md (acest fișier)
-
----
-
-## Cum folosești lista
-
-1. Alege **un** checkbox din „Următor”.
-2. Implementează + `npm test` + `npm run build`.
-3. Mută itemul în „Gata recent” (sau șterge din Următor).
-4. Commit când ceri explicit.
+- [ ] Înregistrare user nou (signup) + invite
+- [ ] Heatmap ținte din `%` deficit față de TDEE
+- [ ] Apple Health / Health Connect
+- [ ] Offline workout queue
 
 ---
 

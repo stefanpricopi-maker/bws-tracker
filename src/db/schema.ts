@@ -42,6 +42,17 @@ export const workoutSets = sqliteTable('workout_sets', {
   weight: real('weight').notNull(),
   reps: integer('reps').notNull(),
   setNumber: integer('set_number').notNull(),
+  rpe: real('rpe'),
+});
+
+export const blockHistory = sqliteTable('block_history', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  block: integer('block').notNull(),
+  startedAt: text('started_at').notNull(),
+  endedAt: text('ended_at'),
 });
 
 export type User = typeof users.$inferSelect;
@@ -55,6 +66,9 @@ export type NewWorkout = typeof workouts.$inferInsert;
 
 export type WorkoutSet = typeof workoutSets.$inferSelect;
 export type NewWorkoutSet = typeof workoutSets.$inferInsert;
+
+export type BlockHistory = typeof blockHistory.$inferSelect;
+export type NewBlockHistory = typeof blockHistory.$inferInsert;
 
 export const userGoals = sqliteTable('user_goals', {
   id: integer('id').primaryKey({ autoIncrement: true }),

@@ -3,15 +3,17 @@ import { test, expect } from '@playwright/test';
 test.describe('Daily Log — Weight entry', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
+    await page.evaluate(() => localStorage.setItem('bws_onboarding_v1', 'done'));
   });
 
-  test('weight input field is visible on dashboard', async ({ page }) => {
-    // WeightTrend component is on the Dashboard tab
+  test('weight input field is visible on stats tab', async ({ page }) => {
+    await page.getByRole('button', { name: /stats|statistici/i }).click();
     const weightInput = page.getByPlaceholder(/weight|kg/i).first();
     await expect(weightInput).toBeVisible();
   });
 
   test('can enter and submit a weight', async ({ page }) => {
+    await page.getByRole('button', { name: /stats|statistici/i }).click();
     const input = page.getByPlaceholder(/weight|kg/i).first();
     await input.fill('84.5');
 

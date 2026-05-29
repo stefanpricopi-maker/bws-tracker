@@ -1,12 +1,15 @@
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../lib/apiAuth';
 import { put } from '@vercel/blob';
 import { db } from '../../db';
 import { dailyLogs } from '../../db/schema';
 import { eq, and } from 'drizzle-orm';
 
-const USER_ID = 1;
 
 export const POST: APIRoute = async ({ request }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   try {
     const form = await request.formData();
     const file = form.get('photo') as File | null;
@@ -32,7 +35,7 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     const ext = file.name.split('.').pop() ?? 'jpg';
-    const filename = `progress/${USER_ID}/${date}.${ext}`;
+    const filename = `progress/${userId}/${date}.${ext}`;
 
     const blob = await put(filename, file, {
       access: 'public',
@@ -43,17 +46,17 @@ export const POST: APIRoute = async ({ request }) => {
     const [existing] = await db
       .select({ id: dailyLogs.id })
       .from(dailyLogs)
-      .where(and(eq(dailyLogs.userId, USER_ID), eq(dailyLogs.date, date)))
+      .where(and(eq(dailyLogs.userId, userId), eq(dailyLogs.date, date)))
       .limit(1);
 
     if (existing) {
       await db
         .update(dailyLogs)
         .set({ photoUrl: blob.url })
-        .where(and(eq(dailyLogs.userId, USER_ID), eq(dailyLogs.date, date)));
+        .where(and(eq(dailyLogs.userId, userId), eq(dailyLogs.date, date)));
     } else {
       await db.insert(dailyLogs).values({
-        userId: USER_ID,
+        userId: userId,
         date,
         photoUrl: blob.url,
       });

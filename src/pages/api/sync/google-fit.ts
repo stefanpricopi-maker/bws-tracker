@@ -1,31 +1,31 @@
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../../lib/apiAuth';
 import { fetchDailyMetrics } from '../../../lib/googleFit';
-import { db } from '../../../db';
-import { googleTokens } from '../../../db/schema';
-import { eq } from 'drizzle-orm';
+import { withRefreshedGoogleClient } from '../../../lib/googleTokenStore';
 
-const USER_ID = 1;
-
-export const GET: APIRoute = async ({ url }) => {
+export const GET: APIRoute = async ({ request, url }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+  const { userId } = auth;
   const date = url.searchParams.get('date') ?? new Date().toISOString().slice(0, 10);
 
   try {
-    // Load stored tokens for user
-    const [stored] = await db
-      .select()
-      .from(googleTokens)
-      .where(eq(googleTokens.userId, USER_ID))
-      .limit(1);
-
-    if (!stored) {
+    const refreshed = await withRefreshedGoogleClient(userId);
+    if (!refreshed.stored) {
       return new Response(
-        JSON.stringify({ error: 'not_connected', message: 'Google Fit not connected. Tap to connect.' }),
+        JSON.stringify({ error: 'not_connected', message: 'Google Fit not connected. Connect in Profile.' }),
         { status: 401, headers: { 'Content-Type': 'application/json' } },
       );
     }
 
-    const metrics = await fetchDailyMetrics(stored.accessToken, stored.refreshToken, date);
-    return new Response(JSON.stringify(metrics), {
+    const accessToken = refreshed.accessToken ?? refreshed.stored.accessToken;
+    const metrics = await fetchDailyMetrics(
+      accessToken,
+      refreshed.stored.refreshToken,
+      date,
+    );
+
+    return new Response(JSON.stringify({ ...metrics, tokenRefreshed: accessToken !== refreshed.stored.accessToken }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -33,7 +33,12 @@ export const GET: APIRoute = async ({ url }) => {
     const message = err instanceof Error ? err.message : String(err);
     const needsReauth = message.includes('invalid_grant') || message.includes('Token has been expired');
     return new Response(
-      JSON.stringify({ error: needsReauth ? 'token_expired' : 'fetch_failed', message }),
+      JSON.stringify({
+        error: needsReauth ? 'token_expired' : 'fetch_failed',
+        message: needsReauth
+          ? 'Google Fit session expired. Reconnect in Profile → Google Fit.'
+          : message,
+      }),
       { status: needsReauth ? 401 : 502, headers: { 'Content-Type': 'application/json' } },
     );
   }

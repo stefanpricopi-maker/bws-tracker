@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../lib/apiAuth';
 
 // Expects env vars:
 //   AI_API_KEY      — your OpenAI (or compatible) API key
@@ -13,6 +14,9 @@ const SYSTEM_PROMPT =
   'Analyze this image of a meal or nutrition label. Estimate the total Calories, Protein (g), Carbs (g), and Fat (g). Return strictly a JSON object with keys: calories, protein, carbs, fat.';
 
 export const POST: APIRoute = async ({ request }) => {
+  const auth = await requireUser(request, 'vision', 15);
+  if (auth instanceof Response) return auth;
+
   if (!API_KEY) {
     return new Response(
       JSON.stringify({ error: 'AI_API_KEY is not configured on the server.' }),

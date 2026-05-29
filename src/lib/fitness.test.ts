@@ -6,6 +6,7 @@ import {
   autoRegulate,
   rollingAverage,
   classifyDay,
+  heatmapThresholdsFromGoals,
   calcStreak,
   calcEatBack,
   selectCoachRule,
@@ -228,6 +229,15 @@ describe('rollingAverage', () => {
 });
 
 // ── classifyDay ───────────────────────────────────────────────────────────────
+
+describe('heatmapThresholdsFromGoals', () => {
+  it('derives bands from user calorie and step targets', () => {
+    const t = heatmapThresholdsFromGoals({ targetCaloriesKcal: 2000, targetSteps: 8000 });
+    expect(t.calMin).toBe(1850);
+    expect(t.calMax).toBe(2100);
+    expect(t.stepMin).toBe(8000);
+  });
+});
 
 describe('classifyDay', () => {
   it('ideal: calories in range AND steps >= 10k', () => {

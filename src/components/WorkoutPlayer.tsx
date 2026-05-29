@@ -72,6 +72,8 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
   const [startTime]                     = useState(() => Date.now());
   const [setsLogged, setSetsLogged]     = useState(0);
   const [confirmQuit, setConfirmQuit]   = useState(false);
+  const [supersetMode, setSupersetMode] = useState(false);
+  const [rpe, setRpe]                   = useState('');
   const timerRef                        = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load stats + image URLs for all exercises ─────────────────────────────
@@ -231,6 +233,8 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
         day_type:      dayType,
       };
       if (workoutId) body.workout_id = workoutId;
+      const rpeNum = parseFloat(rpe);
+      if (!isNaN(rpeNum) && rpeNum >= 1 && rpeNum <= 10) body.rpe = rpeNum;
 
       const res  = await fetch('/api/workout-set', {
         method:  'POST',
@@ -248,15 +252,21 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
     }
     setSaving(false);
 
+    setRpe('');
     const ex = exercises[exIdx];
+    const baseRest = restSecondsForExercise(ex.name);
+    const rest = supersetMode && exIdx % 2 === 0 ? Math.min(45, baseRest) : baseRest;
     if (setIdx < ex.sets) {
-      startRestTimer(restSecondsForExercise(ex.name), advanceAfterRest);
+      startRestTimer(rest, advanceAfterRest);
     } else {
       const nextEx = exIdx + 1;
       if (nextEx >= exercises.length) {
         setPhase('complete');
       } else {
-        startRestTimer(restSecondsForExercise(exercises[nextEx].name), advanceAfterRest);
+        const nextRest = supersetMode && exIdx % 2 === 0
+          ? Math.min(45, restSecondsForExercise(exercises[nextEx].name))
+          : restSecondsForExercise(exercises[nextEx].name);
+        startRestTimer(nextRest, advanceAfterRest);
       }
     }
   }
@@ -585,6 +595,31 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
               className="min-h-[80px] bg-gray-800 border-2 border-gray-600 focus:border-violet-500
                          rounded-2xl text-white text-3xl font-black text-center
                          placeholder-gray-700 focus:outline-none transition-colors"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 px-1">
+          <label className="flex items-center gap-2 text-xs text-gray-400">
+            <input
+              type="checkbox"
+              checked={supersetMode}
+              onChange={(e) => setSupersetMode(e.target.checked)}
+              className="rounded"
+            />
+            Superset pairs (shorter rest)
+          </label>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">RPE</span>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              step={0.5}
+              value={rpe}
+              onChange={(e) => setRpe(e.target.value)}
+              placeholder="—"
+              className="w-14 rounded-lg bg-gray-800 border border-gray-600 text-white text-sm text-center py-1"
             />
           </div>
         </div>
