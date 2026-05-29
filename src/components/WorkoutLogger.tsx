@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { autoRegulate as autoRegulateCalc, calcDeloadWeight } from '../lib/fitness';
 import { getExerciseForBlock, EXERCISE_SWAP, MESOCYCLE_WEEKS } from '../lib/periodization';
 import type { PlannedExercise } from './WorkoutPlayer';
@@ -232,7 +232,7 @@ interface WorkoutLoggerProps {
 }
 
 export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}) {
-  const [selectedDay, setSelectedDay] = useState(0);
+  const [selectedDay, setSelectedDay] = useState(() => (new Date().getDay() + 6) % 7);
   const [medMode, setMedMode] = useState(false);
   const [exercises, setExercises] = useState<ExerciseLog[]>(() =>
     buildExerciseLogs(SPLIT[0], false),
@@ -245,6 +245,35 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
   const [showSessions, setShowSessions] = useState(false);
   const [meso, setMeso] = useState<MesocycleStatus | null>(null);
   const [advancingBlock, setAdvancingBlock] = useState(false);
+
+  // Refs for auto-advance focus: key = "exIdx-setIdx-w" | "exIdx-setIdx-r"
+  const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  function setInputRef(key: string) {
+    return (el: HTMLInputElement | null) => {
+      if (el) inputRefs.current.set(key, el);
+      else inputRefs.current.delete(key);
+    };
+  }
+  function focusInput(key: string) {
+    const el = inputRefs.current.get(key);
+    if (el) { el.focus(); el.select(); }
+  }
+  function handleWeightKey(exIdx: number, si: number, e: React.KeyboardEvent) {
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      focusInput(`${exIdx}-${si}-r`);
+    }
+  }
+  function handleRepsKey(exIdx: number, si: number, e: React.KeyboardEvent) {
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      // Try next set of same exercise, then first set of next exercise
+      const nextSetKey = `${exIdx}-${si + 1}-w`;
+      const nextExKey  = `${exIdx + 1}-0-w`;
+      if (inputRefs.current.has(nextSetKey)) focusInput(nextSetKey);
+      else if (inputRefs.current.has(nextExKey)) focusInput(nextExKey);
+    }
+  }
 
   // ── AI Weekly Planner state ────────────────────────────────────────────────
   interface AiPlanDay { day_name: string; category: string; exercises: string[] }
@@ -587,22 +616,38 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
       )}
 
       {/* Day selector pills */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-        {SPLIT.map((_d, i) => (
-          <button
-            key={i}
-            onClick={() => setSelectedDay(i)}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors duration-150
-              ${
-                selectedDay === i
-                  ? 'bg-violet-600 border-violet-500 text-white'
-                  : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'
-              }`}
-          >
-            {`Day ${i + 1}`}
-          </button>
-        ))}
-      </div>
+      {(() => {
+        // Monday=0 … Sunday=6, matching SPLIT indices
+        const todayIdx = (new Date().getDay() + 6) % 7;
+        return (
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+            {SPLIT.map((_d, i) => {
+              const isToday    = i === todayIdx;
+              const isSelected = i === selectedDay;
+              return (
+                <button
+                  key={i}
+                  onClick={() => setSelectedDay(i)}
+                  className={`flex-shrink-0 flex flex-col items-center px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors duration-150
+                    ${isSelected
+                      ? 'bg-violet-600 border-violet-500 text-white'
+                      : isToday
+                      ? 'bg-gray-700 border-emerald-500/60 text-emerald-300'
+                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'
+                    }`}
+                >
+                  {`Day ${i + 1}`}
+                  {isToday && (
+                    <span className={`text-[9px] font-bold leading-none mt-0.5 ${isSelected ? 'text-violet-200' : 'text-emerald-400'}`}>
+                      today
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* Day label + Google Fit sync */}
       <div className="flex items-center justify-between gap-2">
@@ -938,11 +983,13 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                           {s.setLabel}
                         </span>
                         <input
+                          ref={setInputRef(`${exIdx}-${si}-w`)}
                           type="number"
                           inputMode="decimal"
                           placeholder={isActivation ? 'heavy' : '0'}
                           value={s.weight}
                           onChange={(e) => handleSetChange(exIdx, si, 'weight', e.target.value)}
+                          onKeyDown={(e) => handleWeightKey(exIdx, si, e)}
                           className={`min-h-[44px] bg-gray-900 rounded-xl text-white text-sm text-center placeholder-gray-600 focus:outline-none transition-colors w-full
                             ${isActivation
                               ? 'border border-amber-500/50 focus:border-amber-400'
@@ -952,6 +999,7 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                             }`}
                         />
                         <input
+                          ref={setInputRef(`${exIdx}-${si}-r`)}
                           type="number"
                           inputMode="numeric"
                           placeholder={
@@ -963,6 +1011,7 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                           }
                           value={s.reps}
                           onChange={(e) => handleSetChange(exIdx, si, 'reps', e.target.value)}
+                          onKeyDown={(e) => handleRepsKey(exIdx, si, e)}
                           className={`min-h-[44px] bg-gray-900 rounded-xl text-white text-sm text-center placeholder-gray-600 focus:outline-none transition-colors w-full
                             ${isActivation
                               ? 'border border-amber-500/50 focus:border-amber-400'

@@ -51,6 +51,7 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
   const [saveError, setSaveError]       = useState<string | null>(null);
   const [startTime]                     = useState(() => Date.now());
   const [setsLogged, setSetsLogged]     = useState(0);
+  const [confirmQuit, setConfirmQuit]   = useState(false);
   const timerRef                        = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load stats + image URLs for all exercises ─────────────────────────────
@@ -321,17 +322,44 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
           </div>
         </div>
 
-        {/* Skip button */}
-        <button
-          onClick={() => {
-            if (timerRef.current) clearInterval(timerRef.current);
-            advanceAfterRest();
-          }}
-          className="min-h-[56px] w-full max-w-xs bg-gray-800 hover:bg-gray-700
-                     border border-gray-600 text-white font-bold text-base rounded-2xl transition-colors"
-        >
-          Skip Rest →
-        </button>
+        {/* Skip + Quit buttons */}
+        <div className="w-full flex flex-col gap-2">
+          <button
+            onClick={() => {
+              if (timerRef.current) clearInterval(timerRef.current);
+              advanceAfterRest();
+            }}
+            className="min-h-[56px] w-full bg-gray-800 hover:bg-gray-700
+                       border border-gray-600 text-white font-bold text-base rounded-2xl transition-colors"
+          >
+            Skip Rest →
+          </button>
+          <button
+            onClick={() => setConfirmQuit(true)}
+            className="min-h-[44px] w-full bg-transparent text-gray-600 hover:text-red-400 text-sm font-medium transition-colors"
+          >
+            Quit Workout
+          </button>
+        </div>
+
+        {/* Quit confirm */}
+        {confirmQuit && (
+          <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 pb-6 px-4">
+            <div className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-3xl p-6 flex flex-col gap-4 shadow-2xl">
+              <div className="text-center">
+                <p className="text-2xl mb-2">🚪</p>
+                <p className="text-white font-bold text-lg">Quit workout?</p>
+                <p className="text-gray-400 text-sm mt-1">
+                  {setsLogged > 0 ? `${setsLogged} set${setsLogged !== 1 ? 's' : ''} saved so far will be kept.` : 'No sets saved yet.'}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <button onClick={() => { setConfirmQuit(false); onClose(); }} className="min-h-[52px] w-full bg-red-600 hover:bg-red-500 text-white font-bold text-base rounded-2xl transition-colors">Yes, quit</button>
+                <button onClick={() => setConfirmQuit(false)} className="min-h-[52px] w-full bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-semibold text-base rounded-2xl transition-colors">Continue workout</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       </div>
     );
@@ -356,7 +384,7 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
           Exercise <span className="text-white font-bold">{exIdx + 1}</span> / {exercises.length}
         </p>
         <button
-          onClick={onClose}
+          onClick={() => setConfirmQuit(true)}
           className="w-9 h-9 rounded-full bg-gray-800 hover:bg-gray-700 flex items-center justify-center
                      text-gray-400 hover:text-white transition-colors text-lg"
         >
@@ -498,12 +526,43 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
           {saving ? '⏳ Saving...' : 'SAVE SET ▶'}
         </button>
         <button
-          onClick={onClose}
+          onClick={() => setConfirmQuit(true)}
           className="w-full min-h-[44px] bg-transparent border border-gray-700 hover:border-red-500/60
                      hover:text-red-400 text-gray-500 font-semibold text-sm rounded-2xl transition-colors"
         >
           Quit Workout
         </button>
+
+        {/* Quit confirmation overlay */}
+        {confirmQuit && (
+          <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 pb-6 px-4">
+            <div className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-3xl p-6 flex flex-col gap-4 shadow-2xl">
+              <div className="text-center">
+                <p className="text-2xl mb-2">🚪</p>
+                <p className="text-white font-bold text-lg">Quit workout?</p>
+                <p className="text-gray-400 text-sm mt-1">
+                  {setsLogged > 0
+                    ? `${setsLogged} set${setsLogged !== 1 ? 's' : ''} saved so far will be kept.`
+                    : 'No sets have been saved yet.'}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => { setConfirmQuit(false); onClose(); }}
+                  className="min-h-[52px] w-full bg-red-600 hover:bg-red-500 text-white font-bold text-base rounded-2xl transition-colors"
+                >
+                  Yes, quit
+                </button>
+                <button
+                  onClick={() => setConfirmQuit(false)}
+                  className="min-h-[52px] w-full bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-semibold text-base rounded-2xl transition-colors"
+                >
+                  Continue workout
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
     </div>

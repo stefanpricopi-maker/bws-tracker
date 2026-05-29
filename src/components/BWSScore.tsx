@@ -229,11 +229,31 @@ export default function BWSScore() {
 
       {/* Hero ring + breakdown */}
       <div className="flex flex-col items-center gap-5">
-        {/* Ring */}
+        {/* Ring + weekly trend pill */}
         {loading ? (
           <ScoreRingSkeleton />
         ) : data ? (
-          <ScoreRing score={data.bwsScore} color={color} />
+          <div className="flex flex-col items-center gap-2">
+            <ScoreRing score={data.bwsScore} color={color} />
+            {/* Weekly trend based on weight delta and score level */}
+            {(() => {
+              const d = data.weightDelta7d;
+              if (d == null) return null;
+              const isLosing   = d < -0.1;
+              const isSurplus  = d >  0.2;
+              const isStagnant = !isLosing && !isSurplus;
+              const { label, cls } = isLosing
+                ? { label: `↓ ${Math.abs(d).toFixed(1)} kg this week · On track`, cls: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' }
+                : isSurplus
+                ? { label: `↑ ${d.toFixed(1)} kg this week · Review diet`, cls: 'bg-red-500/15 text-red-400 border-red-500/30' }
+                : { label: 'Weight stable this week', cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30' };
+              return (
+                <span className={`text-xs font-semibold px-3 py-1 rounded-full border ${cls}`}>
+                  {label}
+                </span>
+              );
+            })()}
+          </div>
         ) : (
           <ScoreRingSkeleton />
         )}

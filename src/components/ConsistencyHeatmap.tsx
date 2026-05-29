@@ -133,6 +133,24 @@ export default function ConsistencyHeatmap() {
         </p>
       )}
 
+      {/* Legend */}
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-gray-900/60 border border-gray-700/50 px-3 py-2.5">
+        {([
+          { bg: 'bg-emerald-500', label: 'Ideal day',    desc: `${CAL_MIN}–${CAL_MAX} kcal + ${STEP_MIN.toLocaleString()} steps` },
+          { bg: 'bg-emerald-300', label: 'Active day',   desc: `${STEP_MIN.toLocaleString()}+ steps only` },
+          { bg: 'bg-red-500',     label: 'Surplus day',  desc: `Calories above ${CAL_MAX}` },
+          { bg: 'bg-gray-700',    label: 'Missed',        desc: 'No data logged' },
+        ] as const).map(({ bg, label, desc }) => (
+          <div key={label} className="flex items-start gap-2">
+            <span className={`w-3 h-3 rounded-sm flex-shrink-0 mt-0.5 ${bg}`} />
+            <div>
+              <p className="text-xs font-semibold text-white leading-tight">{label}</p>
+              <p className="text-[10px] text-gray-500 leading-tight">{desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Streak + stats row */}
       <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-700/50">
         <div className="flex items-center gap-2">
@@ -146,24 +164,10 @@ export default function ConsistencyHeatmap() {
             </p>
           </div>
         </div>
-
-        {/* Legend */}
-        <div className="flex flex-col gap-1 items-end">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1 text-[10px] text-gray-400">
-              <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" /> Ideal
-            </span>
-            <span className="flex items-center gap-1 text-[10px] text-gray-400">
-              <span className="w-2.5 h-2.5 rounded-sm bg-emerald-300 inline-block" /> Active
-            </span>
-            <span className="flex items-center gap-1 text-[10px] text-gray-400">
-              <span className="w-2.5 h-2.5 rounded-sm bg-red-500 inline-block" /> Surplus
-            </span>
-          </div>
-          <p className="text-[10px] text-gray-500 text-right">
-            {greenCnt}/30 green · {idealCnt} ideal
-          </p>
-        </div>
+        <p className="text-xs text-gray-500 text-right">
+          <span className="text-emerald-400 font-semibold">{greenCnt}</span>/30 green
+          <br /><span className="text-emerald-500 font-semibold">{idealCnt}</span> ideal
+        </p>
       </div>
     </div>
   );
