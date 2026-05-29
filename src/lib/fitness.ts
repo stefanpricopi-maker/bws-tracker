@@ -206,6 +206,72 @@ export interface HeatmapThresholds {
   stepMin: number;
 }
 
+/** ±15% relative to the user's target deficit % (see SPECS heatmap). */
+export const HEATMAP_DEFICIT_TOLERANCE_PCT = 15;
+
+export interface HeatmapDeficitBands {
+  targetDeficitPct: number;
+  minDeficitPct:    number;
+  maxDeficitPct:    number;
+}
+
+/** % of TDEE not eaten (positive = below maintenance, negative = surplus). */
+export function deficitPercentOfTdee(tdeeKcal: number, eatenKcal: number): number {
+  if (tdeeKcal <= 0) return 0;
+  return ((tdeeKcal - eatenKcal) / tdeeKcal) * 100;
+}
+
+/** Intake at a given deficit % below TDEE (0% = maintenance). */
+export function caloriesAtDeficitPercent(tdeeKcal: number, deficitPercent: number): number {
+  return Math.round(tdeeKcal * (1 - deficitPercent / 100));
+}
+
+export function heatmapDeficitBandsFromGoals(
+  goals: { tdeeKcal?: number | null; targetCaloriesKcal?: number | null } | null,
+  toleranceRelativePct = HEATMAP_DEFICIT_TOLERANCE_PCT,
+): HeatmapDeficitBands | null {
+  const tdee = goals?.tdeeKcal;
+  if (tdee == null || tdee <= 0) return null;
+
+  const targetCal =
+    goals?.targetCaloriesKcal != null && goals.targetCaloriesKcal > 0
+      ? goals.targetCaloriesKcal
+      : CAL_MAX;
+
+  const targetDeficitPct = deficitPercentOfTdee(tdee, targetCal);
+  const delta = (targetDeficitPct * toleranceRelativePct) / 100;
+
+  return {
+    targetDeficitPct,
+    minDeficitPct: Math.max(0, targetDeficitPct - delta),
+    maxDeficitPct: targetDeficitPct + delta,
+  };
+}
+
+export function heatmapThresholdsFromTdeeDeficit(
+  goals: {
+    tdeeKcal?: number | null;
+    targetCaloriesKcal?: number | null;
+    targetSteps?: number | null;
+  } | null,
+): HeatmapThresholds {
+  const bands = heatmapDeficitBandsFromGoals(goals);
+  if (!bands || goals?.tdeeKcal == null || goals.tdeeKcal <= 0) {
+    return heatmapThresholdsFromGoals(goals);
+  }
+
+  const stepMin =
+    goals?.targetSteps != null && goals.targetSteps > 0
+      ? goals.targetSteps
+      : STEP_MIN;
+
+  return {
+    calMin: caloriesAtDeficitPercent(goals.tdeeKcal, bands.maxDeficitPct),
+    calMax: caloriesAtDeficitPercent(goals.tdeeKcal, bands.minDeficitPct),
+    stepMin,
+  };
+}
+
 export function heatmapThresholdsFromGoals(
   goals: { targetCaloriesKcal?: number | null; targetSteps?: number | null } | null,
 ): HeatmapThresholds {

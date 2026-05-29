@@ -7,6 +7,10 @@ import {
   rollingAverage,
   classifyDay,
   heatmapThresholdsFromGoals,
+  heatmapThresholdsFromTdeeDeficit,
+  heatmapDeficitBandsFromGoals,
+  deficitPercentOfTdee,
+  caloriesAtDeficitPercent,
   calcStreak,
   calcEatBack,
   selectCoachRule,
@@ -236,6 +240,57 @@ describe('heatmapThresholdsFromGoals', () => {
     expect(t.calMin).toBe(1850);
     expect(t.calMax).toBe(2100);
     expect(t.stepMin).toBe(8000);
+  });
+});
+
+describe('deficitPercentOfTdee', () => {
+  it('returns % below TDEE (positive = deficit)', () => {
+    expect(deficitPercentOfTdee(2500, 2000)).toBe(20);
+    expect(deficitPercentOfTdee(2500, 2500)).toBe(0);
+  });
+
+  it('returns negative when above TDEE', () => {
+    expect(deficitPercentOfTdee(2500, 2600)).toBe(-4);
+  });
+});
+
+describe('caloriesAtDeficitPercent', () => {
+  it('inverts deficit % to intake kcal', () => {
+    expect(caloriesAtDeficitPercent(2500, 20)).toBe(2000);
+    expect(caloriesAtDeficitPercent(2500, 0)).toBe(2500);
+  });
+});
+
+describe('heatmapDeficitBandsFromGoals', () => {
+  it('returns null without TDEE', () => {
+    expect(heatmapDeficitBandsFromGoals({ targetCaloriesKcal: 2000 })).toBeNull();
+  });
+
+  it('bands target deficit ±15% relative', () => {
+    const b = heatmapDeficitBandsFromGoals({ tdeeKcal: 2500, targetCaloriesKcal: 2000 });
+    expect(b).toEqual({
+      targetDeficitPct: 20,
+      minDeficitPct: 17,
+      maxDeficitPct: 23,
+    });
+  });
+});
+
+describe('heatmapThresholdsFromTdeeDeficit', () => {
+  it('maps deficit bands to calorie min/max', () => {
+    const t = heatmapThresholdsFromTdeeDeficit({
+      tdeeKcal: 2500,
+      targetCaloriesKcal: 2000,
+      targetSteps: 8000,
+    });
+    expect(t.calMin).toBe(1925);
+    expect(t.calMax).toBe(2075);
+    expect(t.stepMin).toBe(8000);
+  });
+
+  it('falls back to calorie targets when TDEE missing', () => {
+    const t = heatmapThresholdsFromTdeeDeficit({ targetCaloriesKcal: 2000, targetSteps: 8000 });
+    expect(t).toEqual(heatmapThresholdsFromGoals({ targetCaloriesKcal: 2000, targetSteps: 8000 }));
   });
 });
 
