@@ -57,19 +57,18 @@ test.describe('Daily Log — Diet entry', () => {
     await page.goto('/?tab=diet');
   });
 
-  test('shows macro input fields', async ({ page }) => {
-    await expect(page.getByText(/calories/i).first()).toBeVisible();
-    await expect(page.getByText(/protein/i).first()).toBeVisible();
+  test('shows meal sections', async ({ page }) => {
+    await expect(page.getByTestId('meal-section-breakfast')).toBeVisible();
+    await expect(page.getByTestId('meal-section-lunch')).toBeVisible();
+    await expect(page.getByTestId('meal-section-dinner')).toBeVisible();
   });
 
-  test('can fill and submit diet data', async ({ page }) => {
-    const calInput = page.getByRole('spinbutton').nth(0);
-    await calInput.fill('1750');
+  test('can fill and submit diet data per meal', async ({ page }) => {
+    await page.getByTestId('meal-breakfast-calories').fill('500');
+    await page.getByTestId('meal-lunch-calories').fill('650');
+    await page.getByTestId('meal-dinner-calories').fill('600');
 
-    const protInput = page.getByRole('spinbutton').nth(1);
-    await protInput.fill('175');
-
-    await page.getByRole('button', { name: /save intake/i }).click();
+    await page.getByRole('button', { name: /salvează ziua/i }).click();
 
     await expect(page.locator('body')).not.toContainText('Error');
   });

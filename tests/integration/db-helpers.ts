@@ -34,7 +34,8 @@ export async function initSchema(client: ReturnType<typeof createClient>) {
       protein_g   REAL,
       carbs_g     REAL,
       fat_g       REAL,
-      photo_url   TEXT
+      photo_url   TEXT,
+      meals_json  TEXT
     );
 
     CREATE TABLE IF NOT EXISTS workouts (

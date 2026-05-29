@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { requireUser } from '../../lib/apiAuth';
 import { validateLogPatch } from '../../lib/logValidation';
+import { parseStoredDayMeals } from '../../lib/mealIntake';
 import { db } from '../../db';
 import { dailyLogs } from '../../db/schema';
 import { eq, and, gte, desc } from 'drizzle-orm';
@@ -43,6 +44,15 @@ export const GET: APIRoute = async ({ request, url }) => {
   });
 };
 
+function parseMealsJsonColumn(raw: string | null): ReturnType<typeof parseStoredDayMeals> {
+  if (!raw) return null;
+  try {
+    return parseStoredDayMeals(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
 // Map DB column names (camelCase) to API names (snake_case) expected by components
 function toClientRow(r: typeof dailyLogs.$inferSelect) {
   return {
@@ -56,12 +66,13 @@ function toClientRow(r: typeof dailyLogs.$inferSelect) {
     carbs_g:      r.carbsG,
     fat_g:        r.fatG,
     photo_url:    r.photoUrl,
+    meals:        parseMealsJsonColumn(r.mealsJson),
   };
 }
 
 // ── POST /api/logs ─────────────────────────────────────────────────────────
 // Body (all fields optional except date):
-//   { date, weight_kg, steps, calories_in, protein_g, carbs_g, fat_g }
+//   { date, weight_kg, steps, calories_in, protein_g, carbs_g, fat_g, meals: { breakfast, lunch, dinner } }
 export const POST: APIRoute = async ({ request }) => {
   const auth = await requireUser(request);
   if (auth instanceof Response) return auth;
