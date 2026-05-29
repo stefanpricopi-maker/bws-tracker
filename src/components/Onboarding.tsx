@@ -28,6 +28,11 @@ export function markOnboardingDone() {
   localStorage.setItem(STORAGE_KEY, 'done');
 }
 
+/** Clears the onboarding flag so the wizard can run again. */
+export function clearOnboarding() {
+  localStorage.removeItem(STORAGE_KEY);
+}
+
 export default function Onboarding({ onComplete }: OnboardingProps) {
   const [step, setStep]       = useState(0);
   const [saving, setSaving]   = useState(false);

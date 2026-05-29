@@ -15,7 +15,7 @@ import ExerciseManager      from './ExerciseManager';
 import WorkoutPlayer        from './WorkoutPlayer';
 import type { PlannedExercise } from './WorkoutPlayer';
 import DailyActionHero      from './DailyActionHero';
-import Onboarding, { needsOnboarding, markOnboardingDone } from './Onboarding';
+import Onboarding, { needsOnboarding, markOnboardingDone, clearOnboarding } from './Onboarding';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
@@ -79,7 +79,11 @@ function StatsTab() {
 
 // ── Profile tab (settings + progress photos) ──────────────────────────────
 
-function ProfileTab() {
+interface ProfileTabProps {
+  onReplayOnboarding: () => void;
+}
+
+function ProfileTab({ onReplayOnboarding }: ProfileTabProps) {
   const [sub, setSub] = useState<'settings' | 'photos'>('settings');
   return (
     <div className="flex flex-col gap-4">
@@ -95,7 +99,7 @@ function ProfileTab() {
           </button>
         ))}
       </div>
-      {sub === 'settings' && <ProfileSettings />}
+      {sub === 'settings' && <ProfileSettings onReplayOnboarding={onReplayOnboarding} />}
       {sub === 'photos'   && <PhotoVault />}
     </div>
   );
@@ -168,9 +172,13 @@ export default function Dashboard() {
     const status = params.get('google_auth');
     if (status && GOOGLE_AUTH_MESSAGES[status]) {
       setGoogleAuthMsg(GOOGLE_AUTH_MESSAGES[status]);
-      // clean up URL without reload
-      const clean = window.location.pathname;
-      window.history.replaceState({}, '', clean);
+    }
+    if (params.get('replay_onboarding') === '1') {
+      clearOnboarding();
+      setShowOnboarding(true);
+    }
+    if (status || params.get('replay_onboarding')) {
+      window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
 
@@ -252,7 +260,9 @@ export default function Dashboard() {
         {active === 'workout'   && <WorkoutTab onStartPlayer={startPlayer} />}
         {active === 'diet'      && <DietTracker />}
         {active === 'stats'     && <StatsTab />}
-        {active === 'profile'   && <ProfileTab />}
+        {active === 'profile'   && (
+          <ProfileTab onReplayOnboarding={() => setShowOnboarding(true)} />
+        )}
       </div>
     </>
   );

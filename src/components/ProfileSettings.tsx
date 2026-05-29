@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { clearOnboarding } from './Onboarding';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -81,7 +82,11 @@ function Toast({ visible }: { visible: boolean }) {
 
 // ── Main component ────────────────────────────────────────────────────────
 
-export default function ProfileSettings() {
+interface ProfileSettingsProps {
+  onReplayOnboarding?: () => void;
+}
+
+export default function ProfileSettings({ onReplayOnboarding }: ProfileSettingsProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(false);
@@ -401,6 +406,24 @@ export default function ProfileSettings() {
         >
           {saving ? 'Saving…' : 'Save Goals'}
         </button>
+
+        {onReplayOnboarding && (
+          <SectionCard title="App">
+            <p className="text-xs text-gray-500 mb-3">
+              Re-run the first-launch setup wizard (name, weight, targets).
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                clearOnboarding();
+                onReplayOnboarding();
+              }}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold text-gray-400 border border-gray-700 hover:text-white hover:border-gray-600 transition-colors"
+            >
+              Replay onboarding
+            </button>
+          </SectionCard>
+        )}
       </div>
     </>
   );
