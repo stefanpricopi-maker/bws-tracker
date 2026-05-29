@@ -16,7 +16,8 @@
 | Database (local/Docker) | LibSQL (`@libsql/client`) via Drizzle ORM — `file:./bws.db` |
 | Database (production) | Turso (LibSQL cloud) — `libsql://...turso.io` |
 | Charts | Recharts |
-| Tests | Vitest (`src/lib/*.test.ts`) |
+| Tests | Vitest (`src/lib/*.test.ts`) · Playwright (`e2e/`) |
+| CI | GitHub Actions — `npm test` + `npm run build` |
 | MCP Server | `@modelcontextprotocol/sdk` + `sql.js` (WASM) |
 | Wearable Data | Google Fit REST API (OAuth2 via `googleapis`) |
 | AI Coach / Planner | OpenAI-compatible API (Groq by default) |
@@ -35,8 +36,10 @@ daily_logs      id | user_id → users | date | weight_kg | steps | calories_in 
 
 workouts        id | user_id → users | date | day_type
 
-workout_sets    id | workout_id → workouts | exercise_name | weight | reps | set_number
+workout_sets    id | workout_id → workouts | exercise_name | weight | reps | set_number | rpe
                 (weight: kg for dumbbells; 1–3 = Light/Medium/Heavy for banded exercises)
+
+block_history   id | user_id → users | block | started_at | ended_at
 
 user_goals      id | user_id → users | target_weight_kg | weekly_weight_loss_kg | tdee_kcal |
                     target_calories_kcal | target_protein_g | target_carbs_g | target_fat_g |
@@ -53,7 +56,18 @@ exercises       id | name (unique) | target_muscle | category | image_url |
 All FK relationships use `ON DELETE CASCADE`.  
 All Drizzle queries are **async** (LibSQL returns Promises).
 
-**Auth note:** `USER_ID = 1` is hardcoded in API routes until multi-user auth lands (see [TODO.md](./TODO.md)).
+**Migrations:** Drizzle SQL in `drizzle/` (through `0004_block_history_rpe`). Prod: `npm run db:migrate`; if `__drizzle_migrations` was empty on an existing DB, run `npm run db:baseline` once (see `docs/STAGING.md`).
+
+### Auth (`src/lib/auth.ts`, `src/lib/apiAuth.ts`)
+
+| Mode | Behaviour |
+|---|---|
+| **Auth off** (default) | No `BWS_AUTH_SECRET` → all APIs use `userId = 1` |
+| **Auth on** | `BWS_AUTH_SECRET` + `BWS_LOGIN_PASSWORD` → cookie session; `requireUser()` returns 401 without login |
+
+- Login: `POST /api/auth/login` · Session: `GET /api/auth/me` · Logout: `POST /api/auth/logout`
+- Google Fit OAuth is separate (`/api/auth/google/*`)
+- **Multi-user signup** is not implemented yet ([TODO.md](./TODO.md) → Idei viitoare)
 
 ---
 
@@ -61,41 +75,56 @@ All Drizzle queries are **async** (LibSQL returns Promises).
 
 | Module | Role |
 |---|---|
-| `fitness.ts` | BWS score, rolling average, heatmap classification, CNS `detectDeload`, `calcDeloadWeight`, `autoRegulate`, `weightIncrementKg` |
-| `periodization.ts` | 8-week mesocycle, Block 1↔2 exercise swap map, `isDeloadWeek`, `deloadSetCount` (~40% volume cut) |
-| `exerciseKind.ts` | `isBandedExercise`, band levels 1–3 → Light/Medium/Heavy, `formatExerciseLoad` |
-| `macroTargets.ts` | `proteinGramsForWeight` (1.8 g/kg), `resolveDietTargets`, macro split from calories + protein |
-| `workoutValidation.ts` | Server validation: kg 0–500, reps 1–100, band levels 1–3 |
-| `restDuration.ts` | Rest timer seconds (60 / 90 / 120) by exercise type |
-| `googleFit.ts` | Google Fit API helpers |
+| `fitness.ts` | BWS score, rolling average, `heatmapThresholdsFromGoals`, CNS deload, `autoRegulate`, `calcForecast` (stagnant only when cutting, `FORECAST_STAGNANT_WEEKLY_KG = -0.25`) |
+| `periodization.ts` | 8-week mesocycle, `EXERCISE_SWAP`, `missingBlock2Swaps`, `isDeloadWeek`, `deloadSetCount` (~40% volume) |
+| `exerciseKind.ts` | `isBandedExercise`, band levels 1–3, `formatExerciseLoad` |
+| `macroTargets.ts` | Protein 1.8 g/kg, `resolveDietTargets`, macro split |
+| `workoutValidation.ts` | Workout/set POST validation (kg, reps, bands) |
+| `logValidation.ts` | Daily log POST validation (weight, macros, steps ranges) |
+| `urlValidation.ts` | HTTPS image URLs for exercise library |
+| `workoutSafety.ts` | M.E.D. high-risk hints, warmup set heuristics |
+| `apiAuth.ts` | `requireUser()` + optional per-route rate limits |
+| `rateLimit.ts` | In-memory IP/window limits for AI and heavy routes |
+| `auth.ts` | Session cookie HMAC, login password check |
+| `tdee.ts` | Onboarding / profile TDEE from weight |
+| `i18n.ts` | RO/EN strings (nav, preferences) |
+| `googleFit.ts` / `googleTokenStore.ts` | Google Fit API + token refresh |
+| `restDuration.ts` | Rest timer seconds by exercise type |
 
 ---
 
 ## API Routes (`src/pages/api/`)
 
+All data routes resolve the current user via `requireUser()` or `resolveUserId()` (see Auth).  
+**Rate limits** (when auth enabled or always on route key): e.g. `workouts`, `ai-coach`, `generate-weekly-plan` (10/min), `vision` (15/min), `macro-solver` (10/min).
+
 | Route | Methods | Description |
 |---|---|---|
-| `/api/logs` | GET, POST | Fetch last N days of `daily_logs` / upsert by `(userId, date)` |
-| `/api/workouts` | GET, POST | Progressive overload lookup by exercise (incl. `needs_deload`) / save workout + sets |
-| `/api/workout-set` | POST, DELETE | Player: save one set live; DELETE discards incomplete session by `workout_id` |
-| `/api/mesocycle` | GET, POST | Current block/week, `isDeloadWeek`; POST advances Block 1↔2 |
-| `/api/exercises` | GET, POST, PATCH | Exercise library CRUD |
-| `/api/daily-status` | GET | Today’s checklist for `DailyActionHero` (weight, meals, steps, workout) |
-| `/api/generate-weekly-plan` | POST | LLM weekly split plan (set counts per exercise) |
-| `/api/analytics` | GET | BWS Score + fitness metrics for user 1 |
-| `/api/profile` | GET, POST | User + goals |
-| `/api/forecast` | GET | Goal date projection (`GoalForecaster`) |
-| `/api/alerts` | GET | Trend alerts (stall, under-eating, inactivity, steps) |
+| `/api/logs` | GET, POST | Daily logs; POST validated via `logValidation.ts` |
+| `/api/workouts` | GET, POST | Overload lookup (`needs_deload`) / save workout + sets |
+| `/api/workout-set` | POST, DELETE | Player live set (+ optional `rpe`); DELETE drops partial session |
+| `/api/mesocycle` | GET, POST | Block/week, deload flag, `block_history`; advance block |
+| `/api/exercises` | GET, POST | Library: `?limit=&offset=&category=` → `{ exercises, total, limit, offset }`; POST + image URL validation |
+| `/api/daily-status` | GET | Today’s checklist (`DailyActionHero`) |
+| `/api/generate-weekly-plan` | GET | LLM weekly plan (set counts; respects deload week) |
+| `/api/analytics` | GET | BWS score + metrics |
+| `/api/profile` | GET, POST | User + `user_goals` |
+| `/api/forecast` | GET | Goal projection (`calcForecast`) |
+| `/api/alerts` | GET | Trend alerts |
 | `/api/weekly-summary` | GET | Week aggregates |
-| `/api/ai-coach` | GET | LLM weekly analysis (4 coaching rules) |
-| `/api/macro-solver` | POST | Macro calculator helper |
-| `/api/upload-photo` | POST | Progress photo upload |
-| `/api/vision` | POST | Food photo → macro estimate |
-| `/api/sync/google-fit` | POST | Sync Google Fit into today’s log |
-| `/api/auth/google/login` | GET | OAuth2 redirect |
-| `/api/auth/google/callback` | GET | Token exchange → `google_tokens` |
-| `/api/google-fit-sessions` | GET | Workout sessions from Google Fit |
-| `/api/health` | GET | Health check |
+| `/api/ai-coach` | GET | LLM weekly analysis |
+| `/api/macro-solver` | GET | AI macro fill from remaining calories |
+| `/api/export` | GET | CSV export `?days=90` |
+| `/api/upload-photo` | POST | Progress photo (Vercel Blob) |
+| `/api/vision` | POST | Food photo → macros |
+| `/api/sync/google-fit` | GET | Sync steps/calories/sleep into today’s log |
+| `/api/google-fit-sessions` | GET | Filtered workout sessions |
+| `/api/auth/login` | POST | App password → session cookie |
+| `/api/auth/logout` | POST | Clear session |
+| `/api/auth/me` | GET | Session status |
+| `/api/auth/google/login` | GET | Google OAuth redirect |
+| `/api/auth/google/callback` | GET | Google token storage |
+| `/api/health` | GET | Env presence check (no auth) |
 
 ---
 
@@ -108,12 +137,13 @@ Top nav (5 tabs):
 | Tab | ID | Main components |
 |---|---|---|
 | Home | `dashboard` | `DailyActionHero`, `StepTracker`, `AlertBanner`, `GoalForecaster`, `ConsistencyHeatmap`, `WeeklyCheckIn`, `WeeklySummary`, `PullToRefresh` |
-| Workout | `workout` | `WorkoutLogger` (+ overlay `WorkoutPlayer`), `ExerciseManager` (📚 Library) |
+| Workout | `workout` | `WorkoutLogger` (+ `WorkoutPlayer` via `WorkoutPlayerProvider`), `ExerciseManager` (paginated library) |
 | Diet | `diet` | `DietTracker` (targets from `macroTargets` + profile / latest weight) |
 | Stats | `stats` | `BWSScore`, `WeightTrend` |
 | Profile | `profile` | `ProfileSettings` · `PhotoVault` (sub-tabs Settings / Photos) |
 
-**Overlays:** `Onboarding` (first run + replay from Profile or `?replay_onboarding=1`), `WorkoutPlayer` (guided session), `InstallPrompt` (PWA).
+**Overlays:** `Onboarding` (TDEE from weight), `WorkoutPlayer`, `InstallPrompt` (PWA).  
+**Preferences (Profile):** i18n RO/EN, dark/light `data-theme`, PWA notifications toggle, CSV export link.
 
 ### Legacy / secondary
 
@@ -148,7 +178,9 @@ Dumbbells + resistance bands only. See `SPLIT` in `WorkoutLogger.tsx`.
 |---|---|
 | 1–7 | Progressive work; Block 1 or Block 2 exercises (`EXERCISE_SWAP`) |
 | 8 | **Deload week:** `deloadSetCount()` (~40% fewer sets), loads ~12.5% lighter (`DELOAD_LOAD_FACTOR = 0.875`) |
-| After week 8 | User can advance block via UI → POST `/api/mesocycle` |
+| After week 8 | User advances block via UI → POST `/api/mesocycle` (appends `block_history`) |
+
+UI warns when Block 2 has no entry in `EXERCISE_SWAP` (`missingBlock2Swaps`).
 
 ### Auto-regulation (progressive overload)
 
@@ -173,10 +205,14 @@ Visual: ⬆️ badge (kg increment), 🎯 target line, 🔻 CNS or mesocycle del
 - UI: band dropdown, `formatExerciseLoad()` in Previous / Target lines
 - Validation: `workoutValidation.ts`
 
-### WorkoutPlayer
+### WorkoutPlayer (`WorkoutPlayerContext` starts session from Logger)
 
-- Full-screen guide: rest timer (differentiated), sound/vibrate, skip exercise, day plan panel
-- Saves sets via `POST /api/workout-set`; quit mid-session → `DELETE` removes partial workout
+- Load session: exercise images + auto-reg targets per exercise
+- **Warmup** prompt on set 1 for compounds (`workoutSafety.ts`)
+- Optional **RPE** (1–10) per set; **superset** mode (shorter rest)
+- M.E.D. high-risk banner on sensitive lifts
+- Rest timer by `restDuration.ts`; quit → `DELETE` partial workout
+- Started via `WorkoutPlayerProvider` in `Dashboard` (no prop drilling)
 
 ---
 
@@ -212,8 +248,8 @@ Google Fit active calories: treated as **NEAT / activity**, not “sport burn”
 
 ## Consistency Heatmap
 
-30-day grid. Thresholds use `CAL_MIN` / `CAL_MAX` / `STEP_MIN` in `fitness.ts` (defaults 1200–1850 kcal, 10k steps).  
-**Future:** align heatmap limits with per-user `user_goals` ([TODO.md](./TODO.md)).
+30-day grid. Thresholds from `heatmapThresholdsFromGoals()` using profile `user_goals` (calories ±15%, steps target).  
+**Future:** % deficit vs TDEE for calorie bands ([TODO.md](./TODO.md)).
 
 ---
 
@@ -247,9 +283,10 @@ Stdio · `sql.js` WASM · reads local DB.
 | Tool | Description |
 |---|---|
 | `get_fitness_summary` | Last N days metrics |
-| `get_exercise_history` | Sets by exercise |
+| `get_exercise_history` | Sets by exercise (band labels) |
 | `get_weekly_summary` | Week aggregates |
 | `get_overload_report` | Volume trend by exercise |
+| `get_mesocycle_status` | Current block, week, deload flag |
 
 Build: `cd mcp-server && npm run build` — configure path in `~/.cursor/mcp.json`.
 
@@ -279,9 +316,13 @@ Build: `cd mcp-server && npm run build` — configure path in `~/.cursor/mcp.jso
 npm run dev          # http://localhost:4321
 npm run build        # Vercel production build
 npm test             # Vitest (src/lib)
+npm run test:e2e     # Playwright
+
 npm run db:generate  # Drizzle migration diff
-npm run db:migrate   # Apply migrations
-npm run db:push      # Push schema to Turso
+npm run db:migrate   # Apply pending migrations (drizzle-kit)
+npm run db:baseline  # One-time: sync __drizzle_migrations on existing DB
+npm run db:migrate:legacy  # Idempotent SQL runner (Docker startup)
+npm run db:push      # Push schema (dev only)
 npm run db:studio    # Drizzle Studio
 
 docker compose up --build
@@ -314,7 +355,10 @@ Env vars: see `README.md` and `.env.example`.
 - [x] **Phase 20** — Macro targets from body weight (`macroTargets.ts`), dynamic Diet + Profile TDEE
 - [x] **Phase 21** — UX: Stats tab, `DailyActionHero`, onboarding, pull-to-refresh, quit confirm, WorkoutPlayer enhancements, exercise library, goal forecaster, photo vault
 - [x] **Phase 22** — Sport polish: Previous/Target band labels, deload volume in logger + AI player path
+- [x] **Phase 23** — Product batch: heatmap from goals, onboarding TDEE, AI weekly plan, optional auth, CSV export, i18n, theme, RPE, superset, CI, MCP mesocycle tool
+- [x] **Phase 24** — Hardening: log/image validation, rate limits, forecast stagnant rule, Player warmup/MED, swap warnings, `WorkoutPlayerProvider`, API auth on forecast/exercises
+- [x] **Phase 25** — Exercise library pagination (`limit`/`offset`/`category`), migration `0004`, Drizzle baseline scripts
 
 ---
 
-*Last updated: 2026-05-29*
+*Last updated: 2026-05-29 (SPECS refresh)*
