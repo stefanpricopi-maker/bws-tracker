@@ -9,10 +9,24 @@ function makeLogs(overrides: { date: string; caloriesIn?: number; steps?: number
   return overrides;
 }
 
-function mockFetch(logs: ReturnType<typeof makeLogs>) {
-  global.fetch = vi.fn().mockResolvedValue({
-    json: () => Promise.resolve(logs),
-  } as unknown as Response);
+interface MockGoals {
+  tdeeKcal?: number | null;
+  targetCaloriesKcal?: number | null;
+  targetSteps?: number | null;
+}
+
+function mockFetch(logs: ReturnType<typeof makeLogs>, goals: MockGoals | null = null) {
+  global.fetch = vi.fn((input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url.includes('/api/profile')) {
+      return Promise.resolve({
+        json: () => Promise.resolve({ goals }),
+      } as Response);
+    }
+    return Promise.resolve({
+      json: () => Promise.resolve(logs),
+    } as Response);
+  });
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -43,6 +57,13 @@ describe('ConsistencyHeatmap', () => {
     render(<ConsistencyHeatmap />);
     const hint = await screen.findByText('Start today');
     expect(hint).toBeInTheDocument();
+  });
+
+  it('legend uses TDEE deficit bands when profile has tdee', async () => {
+    mockFetch([], { tdeeKcal: 2500, targetCaloriesKcal: 2000, targetSteps: 8000 });
+    render(<ConsistencyHeatmap />);
+    const legend = await screen.findByText(/1925–2075 kcal \+ 8,000 steps/i);
+    expect(legend).toBeInTheDocument();
   });
 
   it('displays non-zero streak when recent days are ideal', async () => {

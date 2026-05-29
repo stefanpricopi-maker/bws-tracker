@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   classifyDay as classify,
   calcStreak,
-  heatmapThresholdsFromGoals,
+  heatmapThresholdsFromTdeeDeficit,
 } from '../lib/fitness';
 import type { DayStatus, DayData, HeatmapThresholds } from '../lib/fitness';
 
@@ -51,8 +51,14 @@ export default function ConsistencyHeatmap() {
       fetch('/api/logs?days=30').then((r) => r.json()),
       fetch('/api/profile').then((r) => r.json()),
     ])
-      .then(([rows, profile]: [LogRow[], { goals?: { targetCaloriesKcal?: number; targetSteps?: number } }]) => {
-        const t = heatmapThresholdsFromGoals(profile.goals ?? null);
+      .then(([rows, profile]: [LogRow[], {
+        goals?: {
+          tdeeKcal?: number | null;
+          targetCaloriesKcal?: number | null;
+          targetSteps?: number | null;
+        } | null;
+      }]) => {
+        const t = heatmapThresholdsFromTdeeDeficit(profile.goals ?? null);
         setThresholds(t);
         const logMap = new Map(rows.map((r) => [r.date, r]));
         const dates  = buildDateRange(30);
