@@ -43,7 +43,7 @@ All numbers must be rounded to 1 decimal place. Verify that daily_totals matches
 }
 
 export const GET: APIRoute = async ({ request }) => {
-  const auth = await requireUser(request);
+  const auth = await requireUser(request, 'macro-solver', 10);
   if (auth instanceof Response) return auth;
   const { userId } = auth;
   if (!API_KEY) {

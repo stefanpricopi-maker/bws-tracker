@@ -1,11 +1,11 @@
 import type { APIRoute } from 'astro';
+import { requireUser } from '../../lib/apiAuth';
+import { validateExerciseImageUrl } from '../../lib/urlValidation';
 import { db } from '../../db';
 import { exercises } from '../../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
-// ── Default home-gym exercise seed ────────────────────────────────────────────
 const DEFAULT_EXERCISES: Array<{ name: string; targetMuscle: string; category: string }> = [
-  // Push
   { name: 'Dumbbell Floor Press',        targetMuscle: 'Chest',       category: 'Push' },
   { name: 'Deficit Push-ups',            targetMuscle: 'Chest',       category: 'Push' },
   { name: 'Banded Chest Flyes',          targetMuscle: 'Chest',       category: 'Push' },
@@ -14,7 +14,6 @@ const DEFAULT_EXERCISES: Array<{ name: string; targetMuscle: string; category: s
   { name: 'Banded Lateral Raises',       targetMuscle: 'Shoulders',   category: 'Push' },
   { name: 'Banded Triceps Pushdowns',    targetMuscle: 'Triceps',     category: 'Push' },
   { name: 'Dumbbell Floor Skullcrushers',targetMuscle: 'Triceps',     category: 'Push' },
-  // Pull
   { name: 'Dumbbell Bent-Over Row',      targetMuscle: 'Back',        category: 'Pull' },
   { name: 'Single-Arm Dumbbell Row',     targetMuscle: 'Back',        category: 'Pull' },
   { name: 'Banded Lat Pulldown',         targetMuscle: 'Back',        category: 'Pull' },
@@ -23,7 +22,6 @@ const DEFAULT_EXERCISES: Array<{ name: string; targetMuscle: string; category: s
   { name: 'Dumbbell Reverse Flyes',      targetMuscle: 'Rear Delts',  category: 'Pull' },
   { name: 'Dumbbell Biceps Curl',        targetMuscle: 'Biceps',      category: 'Pull' },
   { name: 'Banded Hammer Curl',          targetMuscle: 'Biceps',      category: 'Pull' },
-  // Legs
   { name: 'Bulgarian Split Squats',      targetMuscle: 'Quads',       category: 'Legs' },
   { name: 'Dumbbell Goblet Squats',      targetMuscle: 'Quads',       category: 'Legs' },
   { name: 'Dumbbell Romanian Deadlifts', targetMuscle: 'Hamstrings',  category: 'Legs' },
@@ -41,17 +39,35 @@ async function ensureSeeded() {
   }
 }
 
-// ── GET /api/exercises ─────────────────────────────────────────────────────────
-export const GET: APIRoute = async () => {
+// ── GET /api/exercises?limit=100&offset=0 ────────────────────────────────────
+export const GET: APIRoute = async ({ request, url }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+
   try {
     await ensureSeeded();
+    const limit  = Math.min(Math.max(1, Number(url.searchParams.get('limit')) || 200), 500);
+    const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
+
     const rows = await db
       .select()
       .from(exercises)
       .where(eq(exercises.isArchived, false))
-      .orderBy(exercises.category, exercises.name);
+      .orderBy(exercises.category, exercises.name)
+      .limit(limit)
+      .offset(offset);
 
-    return new Response(JSON.stringify({ exercises: rows }), {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(exercises)
+      .where(eq(exercises.isArchived, false));
+
+    return new Response(JSON.stringify({
+      exercises: rows,
+      total: Number(count),
+      limit,
+      offset,
+    }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -66,17 +82,20 @@ export const GET: APIRoute = async () => {
 
 // ── POST /api/exercises ────────────────────────────────────────────────────────
 export const POST: APIRoute = async ({ request }) => {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) return auth;
+
   try {
     const body = await request.json() as {
       name?: string;
       target_muscle?: string;
       category?: string;
+      image_url?: string;
     };
 
     const name         = body.name?.trim() ?? '';
     const targetMuscle = body.target_muscle?.trim() ?? '';
     const category     = body.category?.trim() ?? '';
-    const imageUrl     = (body as { image_url?: string }).image_url?.trim() || null;
 
     if (!name || !targetMuscle || !category) {
       return new Response(
@@ -93,9 +112,24 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
+    const imageCheck = validateExerciseImageUrl(body.image_url);
+    if (!imageCheck.ok) {
+      return new Response(JSON.stringify({ error: imageCheck.error }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     const [inserted] = await db
       .insert(exercises)
-      .values({ name, targetMuscle, category, imageUrl, isCustom: true, isArchived: false })
+      .values({
+        name,
+        targetMuscle,
+        category,
+        imageUrl: imageCheck.url,
+        isCustom: true,
+        isArchived: false,
+      })
       .returning();
 
     return new Response(JSON.stringify({ exercise: inserted }), {

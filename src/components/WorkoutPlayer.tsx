@@ -8,6 +8,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { autoRegulate as autoRegulateCalc, calcDeloadWeight } from '../lib/fitness';
 import { restSecondsForExercise } from '../lib/restDuration';
 import { isBandedExercise, formatExerciseLoad } from '../lib/exerciseKind';
+import { isHighRiskMedExercise, needsWarmupSet, suggestedWarmupWeight } from '../lib/workoutSafety';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -74,67 +75,68 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
   const [confirmQuit, setConfirmQuit]   = useState(false);
   const [supersetMode, setSupersetMode] = useState(false);
   const [rpe, setRpe]                   = useState('');
+  const [warmupDone, setWarmupDone]     = useState<Record<number, boolean>>({});
   const timerRef                        = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // ── Load stats + image URLs for all exercises ─────────────────────────────
-
-  useEffect(() => {
-    async function load() {
-      // Fetch image URLs from exercise library
-      const libRes   = await fetch('/api/exercises').catch(() => ({ json: async () => ({ exercises: [] }) }));
-      const libData  = await libRes.json() as { exercises: Array<{ name: string; imageUrl?: string | null }> };
-      const imageMap = Object.fromEntries(
-        (libData.exercises ?? []).map((e) => [e.name, e.imageUrl ?? null]),
-      );
-
-      // Fetch prev stats for each exercise in parallel
-      const results = await Promise.all(
-        exercises.map((ex) =>
-          fetch(`/api/workouts?exercise_name=${encodeURIComponent(ex.name)}`)
-            .then((r) => r.json())
-            .catch(() => ({})),
-        ),
-      );
-
-      const statsMap: Record<string, ExStats> = {};
-      exercises.forEach((ex, i) => {
-        const r = results[i] ?? {};
-        const needsDeload = r.needs_deload === true;
-        let targetWeight: number | null = null;
-        let targetReps:   number | null = null;
-        if (needsDeload && r.maxWeight != null) {
-          targetWeight = calcDeloadWeight(r.maxWeight, isBandedExercise(ex.name));
-          targetReps   = 10;
-        } else {
-          ({ targetWeight, targetReps } = autoRegulateCalc(
-            r.maxWeight ?? null,
-            r.maxReps ?? null,
-            ex.name,
-          ));
-        }
-        statsMap[ex.name] = {
-          targetWeight,
-          targetReps,
-          lastWeight: r.lastWeight ?? null,
-          lastReps:   r.lastReps   ?? null,
-          needsDeload,
-          imageUrl:   imageMap[ex.name] ?? null,
-        };
-      });
-
-      setStats(statsMap);
-      prefillInputs(exercises[0].name, statsMap);
-      setPhase('working');
-    }
-    load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   function prefillInputs(name: string, statsMap: Record<string, ExStats>) {
     const s = statsMap[name];
     setWeight(s?.targetWeight != null ? String(s.targetWeight) : '');
     setReps(  s?.targetReps   != null ? String(s.targetReps)   : '');
   }
+
+  const loadSession = useCallback(async () => {
+    setPhase('loading');
+    const libRes  = await fetch('/api/exercises').catch(() => ({ json: async () => ({ exercises: [] }) }));
+    const libData = await libRes.json() as { exercises: Array<{ name: string; imageUrl?: string | null }> };
+    const imageMap = Object.fromEntries(
+      (libData.exercises ?? []).map((e) => [e.name, e.imageUrl ?? null]),
+    );
+
+    const results = await Promise.all(
+      exercises.map((ex) =>
+        fetch(`/api/workouts?exercise_name=${encodeURIComponent(ex.name)}`)
+          .then((r) => r.json())
+          .catch(() => ({})),
+      ),
+    );
+
+    const statsMap: Record<string, ExStats> = {};
+    exercises.forEach((ex, i) => {
+      const r = results[i] ?? {};
+      const needsDeload = r.needs_deload === true;
+      let targetWeight: number | null = null;
+      let targetReps:   number | null = null;
+      if (needsDeload && r.maxWeight != null) {
+        targetWeight = calcDeloadWeight(r.maxWeight, isBandedExercise(ex.name));
+        targetReps   = 10;
+      } else {
+        ({ targetWeight, targetReps } = autoRegulateCalc(
+          r.maxWeight ?? null,
+          r.maxReps ?? null,
+          ex.name,
+        ));
+      }
+      statsMap[ex.name] = {
+        targetWeight,
+        targetReps,
+        lastWeight: r.lastWeight ?? null,
+        lastReps:   r.lastReps   ?? null,
+        needsDeload,
+        imageUrl:   imageMap[ex.name] ?? null,
+      };
+    });
+
+    setStats(statsMap);
+    setWarmupDone({});
+    setExIdx(0);
+    setSetIdx(1);
+    prefillInputs(exercises[0].name, statsMap);
+    setPhase('working');
+  }, [exercises]);
+
+  useEffect(() => {
+    void loadSession();
+  }, [loadSession]);
 
   // ── Rest-timer tick ───────────────────────────────────────────────────────
 
@@ -275,6 +277,15 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
 
   const ex       = exercises[exIdx];
   const exStats  = ex ? stats[ex.name] : null;
+  const showWarmup =
+    phase === 'working' &&
+    setIdx === 1 &&
+    !warmupDone[exIdx] &&
+    !!ex &&
+    needsWarmupSet(ex.name);
+  const warmupKg = ex
+    ? suggestedWarmupWeight(exStats?.targetWeight ?? 0, isBandedExercise(ex.name))
+    : null;
   const elapsed  = Math.round((Date.now() - startTime) / 60000);
 
   // ── Progress bar ─────────────────────────────────────────────────────────
@@ -508,10 +519,35 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
         <div className="text-center">
           <h1 className="text-2xl font-black text-white leading-tight">{ex.name}</h1>
           <p className="text-violet-400 font-bold text-lg mt-1">
-            Set {setIdx} <span className="text-gray-500 font-normal">of</span> {ex.sets}
+            {showWarmup ? (
+              <span className="text-sky-400">Warmup</span>
+            ) : (
+              <>
+                Set {setIdx} <span className="text-gray-500 font-normal">of</span> {ex.sets}
+              </>
+            )}
           </p>
         </div>
 
+        {isHighRiskMedExercise(ex.name) && (
+          <div className="rounded-xl bg-amber-900/30 border border-amber-500/30 px-3 py-2 text-xs text-amber-200">
+            M.E.D. focus: prioritize form and controlled tempo on this lift.
+          </div>
+        )}
+
+        {showWarmup && (
+          <div className="rounded-2xl bg-sky-900/25 border border-sky-500/40 p-4 flex flex-col gap-3">
+            <p className="text-sm font-bold text-sky-200">Warmup before working sets</p>
+            <p className="text-xs text-gray-300 leading-relaxed">
+              {warmupKg != null
+                ? `Suggested: ~${warmupKg} kg (≈50% target) for 8–12 easy reps, or empty bar.`
+                : 'Do 1–2 light sets to prepare joints before loading working weight.'}
+            </p>
+          </div>
+        )}
+
+        {!showWarmup && (
+        <>
         {/* Auto-regulation hint */}
         <div className="rounded-2xl bg-gray-800 border border-gray-700 p-4 flex flex-col gap-2">
           {exStats?.needsDeload && (
@@ -623,6 +659,8 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
             />
           </div>
         </div>
+        </>
+        )}
 
         {/* Error */}
         {saveError && (
@@ -651,6 +689,25 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
       {/* SAVE SET + Skip + Quit — sticky bottom */}
       <div className="flex-shrink-0 px-4 pb-6 pt-2 bg-gray-950 border-t border-gray-800 flex flex-col gap-2"
            style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
+        {showWarmup ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setWarmupDone((d) => ({ ...d, [exIdx]: true }))}
+              className="w-full min-h-[64px] bg-sky-600 hover:bg-sky-500 text-white font-black text-xl tracking-wide rounded-2xl transition-colors"
+            >
+              Warmup done → Set 1
+            </button>
+            <button
+              type="button"
+              onClick={() => setWarmupDone((d) => ({ ...d, [exIdx]: true }))}
+              className="w-full min-h-[44px] text-gray-500 hover:text-gray-300 text-sm"
+            >
+              Skip warmup
+            </button>
+          </>
+        ) : (
+          <>
         <p className="text-[10px] text-center text-gray-600">
           Rest after save: {restSecondsForExercise(ex.name)}s
           {setIdx >= ex.sets && exIdx + 1 < exercises.length && (
@@ -668,6 +725,8 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
         >
           {saving ? '⏳ Saving...' : 'SAVE SET ▶'}
         </button>
+          </>
+        )}
         <button
           type="button"
           onClick={skipExercise}

@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { isDeloadWeek, deloadSetCount, MESOCYCLE_WEEKS, MESOCYCLE_WORK_WEEKS } from './periodization';
+import {
+  isDeloadWeek,
+  deloadSetCount,
+  missingBlock2Swaps,
+  MESOCYCLE_WEEKS,
+  MESOCYCLE_WORK_WEEKS,
+} from './periodization';
 
 describe('isDeloadWeek', () => {
   it('week 8 (index 7) is deload', () => {
@@ -23,5 +29,13 @@ describe('deloadSetCount', () => {
   it('keeps at least 1 set', () => {
     expect(deloadSetCount(1)).toBe(1);
     expect(deloadSetCount(2)).toBe(1);
+  });
+});
+
+describe('missingBlock2Swaps', () => {
+  it('flags exercises without swap map entry', () => {
+    expect(missingBlock2Swaps(['Dumbbell Floor Press', 'Unknown Exercise'])).toEqual([
+      'Unknown Exercise',
+    ]);
   });
 });

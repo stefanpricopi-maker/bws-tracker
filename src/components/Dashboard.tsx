@@ -17,6 +17,7 @@ import DailyActionHero      from './DailyActionHero';
 import PullToRefresh        from './PullToRefresh';
 import Onboarding, { needsOnboarding, markOnboardingDone, clearOnboarding } from './Onboarding';
 import { getStoredLocale, t } from '../lib/i18n';
+import { WorkoutPlayerProvider } from '../context/WorkoutPlayerContext';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
@@ -112,12 +113,8 @@ function ProfileTab({ onReplayOnboarding }: ProfileTabProps) {
 
 // ── Workout tab (sub-tabs: Log / Library) ─────────────────────────────────
 
-interface WorkoutTabProps {
-  onStartPlayer: (exercises: PlannedExercise[], dayType: string) => void;
-}
-
-function WorkoutTab({ onStartPlayer }: WorkoutTabProps) {
-  return <WorkoutLogger onStartPlayer={onStartPlayer} />;
+function WorkoutTab() {
+  return <WorkoutLogger />;
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
@@ -243,15 +240,17 @@ export default function Dashboard() {
       </nav>
 
       {/* Page content */}
+      <WorkoutPlayerProvider startPlayer={startPlayer}>
       <div className="flex-1 overflow-y-auto px-4 pt-6 pb-8">
         {active === 'dashboard' && <DashboardTab onNavigate={setActive} />}
-        {active === 'workout'   && <WorkoutTab onStartPlayer={startPlayer} />}
+        {active === 'workout'   && <WorkoutTab />}
         {active === 'diet'      && <DietTracker />}
         {active === 'stats'     && <StatsTab />}
         {active === 'profile'   && (
           <ProfileTab onReplayOnboarding={() => setShowOnboarding(true)} />
         )}
       </div>
+      </WorkoutPlayerProvider>
     </>
   );
 }

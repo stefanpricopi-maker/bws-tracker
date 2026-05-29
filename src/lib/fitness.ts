@@ -295,8 +295,10 @@ export interface ForecastResult {
  * Compares average weight of the FIRST half vs LAST half of a 14-day window
  * to compute a noise-resistant rate of change.
  *
- * Returns is_stagnant when the user is losing < 0.1 kg/week or gaining.
+ * Stagnant when cutting toward goalKg but losing < 250 g/week (noise-tolerant) or gaining.
  */
+export const FORECAST_STAGNANT_WEEKLY_KG = -0.25;
+
 export function calcForecast(input: ForecastInput): ForecastResult {
   const { weights, goalKg, today } = input;
 
@@ -325,8 +327,8 @@ export function calcForecast(input: ForecastInput): ForecastResult {
   const currentAvgKg = +avgLast.toFixed(1);
   const alreadyAtGoal = currentAvgKg <= goalKg;
 
-  // Stagnant if losing less than 100g/week OR gaining
-  const isStagnant = weeklyRate >= -0.1;
+  const cutting = currentAvgKg > goalKg;
+  const isStagnant = cutting && weeklyRate >= FORECAST_STAGNANT_WEEKLY_KG;
 
   if (alreadyAtGoal) {
     return { isStagnant: false, weeklyRateKg: weeklyRate, currentAvgKg,

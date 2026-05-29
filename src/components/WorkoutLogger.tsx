@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { autoRegulate as autoRegulateCalc, calcDeloadWeight, weightIncrementKg } from '../lib/fitness';
-import { getExerciseForBlock, EXERCISE_SWAP, MESOCYCLE_WEEKS, deloadSetCount } from '../lib/periodization';
+import { getExerciseForBlock, EXERCISE_SWAP, MESOCYCLE_WEEKS, deloadSetCount, missingBlock2Swaps } from '../lib/periodization';
+import { isHighRiskMedExercise } from '../lib/workoutSafety';
 import { isBandedExercise, formatExerciseLoad, formatBandLevel } from '../lib/exerciseKind';
 import type { PlannedExercise } from './WorkoutPlayer';
+import { useStartWorkoutPlayerOptional } from '../context/WorkoutPlayerContext';
 import ExerciseManager from './ExerciseManager';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -250,7 +252,9 @@ interface WorkoutLoggerProps {
   onStartPlayer?: (exercises: PlannedExercise[], dayType: string) => void;
 }
 
-export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}) {
+export default function WorkoutLogger({ onStartPlayer: onStartPlayerProp }: WorkoutLoggerProps = {}) {
+  const startPlayerCtx = useStartWorkoutPlayerOptional();
+  const onStartPlayer = onStartPlayerProp ?? startPlayerCtx ?? undefined;
   const [selectedDay, setSelectedDay] = useState(() => (new Date().getDay() + 6) % 7);
   const [medMode, setMedMode] = useState(false);
   const [exercises, setExercises] = useState<ExerciseLog[]>(() =>
@@ -269,6 +273,8 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
 
   // Refs for auto-advance focus: key = "exIdx-setIdx-w" | "exIdx-setIdx-r"
   const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const fetchGenRef = useRef(0);
+  const fetchAbortRef = useRef<AbortController | null>(null);
   function setInputRef(key: string) {
     return (el: HTMLInputElement | null) => {
       if (el) inputRefs.current.set(key, el);
@@ -378,6 +384,10 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
 
   const fetchPrevStats = useCallback(async (day: DayConfig, isMed: boolean, forceDeloadWeek = false) => {
     if (day.isRest) return;
+    fetchAbortRef.current?.abort();
+    const ac = new AbortController();
+    fetchAbortRef.current = ac;
+    const gen = ++fetchGenRef.current;
     setLoadingPrev(true);
     const exerciseNames = isMed && day.medExercise
       ? [day.medExercise]
@@ -385,11 +395,15 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
     try {
       const results = await Promise.all(
         exerciseNames.map((name) =>
-          fetch(`/api/workouts?exercise_name=${encodeURIComponent(name)}`)
+          fetch(`/api/workouts?exercise_name=${encodeURIComponent(name)}`, { signal: ac.signal })
             .then((r) => r.json())
-            .catch(() => ({ lastWeight: null, lastReps: null, lastDate: null, maxWeight: null, maxReps: null, needs_deload: false })),
+            .catch((err: unknown) => {
+              if (err instanceof DOMException && err.name === 'AbortError') throw err;
+              return { lastWeight: null, lastReps: null, lastDate: null, maxWeight: null, maxReps: null, needs_deload: false };
+            }),
         ),
       );
+      if (ac.signal.aborted || gen !== fetchGenRef.current) return;
       setExercises((prev) =>
         prev.map((ex, i) => {
           const r = results[i] ?? {};
@@ -435,10 +449,16 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
           };
         }),
       );
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
     } finally {
-      setLoadingPrev(false);
+      if (!ac.signal.aborted && gen === fetchGenRef.current) {
+        setLoadingPrev(false);
+      }
     }
   }, []);
+
+  useEffect(() => () => { fetchAbortRef.current?.abort(); }, []);
 
   // Rebuild exercise list when day or MED mode changes
   // Fetch mesocycle status once on mount
@@ -579,6 +599,10 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
   }
 
   const day = SPLIT[selectedDay];
+  const missingSwaps = useMemo(
+    () => (day.isRest ? [] : missingBlock2Swaps(day.exercises)),
+    [selectedDay, day.isRest],
+  );
 
   if (showLibrary) {
     return (
@@ -974,6 +998,22 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
             One heavy compound with Myo-Reps (activation set → 3 cluster mini-sets, 10s rest between)
             delivers enough stimulus to prevent regression. Always better than skipping entirely.
           </p>
+        </div>
+      )}
+
+      {medMode && !day.isRest && isHighRiskMedExercise(day.medExercise) && (
+        <div className="rounded-xl bg-red-900/30 border border-red-500/40 px-3 py-2.5">
+          <p className="text-xs text-red-200 font-semibold">⚠️ High-risk M.E.D. exercise</p>
+          <p className="text-[11px] text-red-300/90 mt-1 leading-relaxed">
+            Myo-Reps on <strong>{day.medExercise}</strong> under fatigue increase injury risk.
+            Prefer curls, lateral raises, or band work for M.E.D. when possible.
+          </p>
+        </div>
+      )}
+
+      {missingSwaps.length > 0 && meso && meso.currentBlock === 1 && (
+        <div className="rounded-xl bg-amber-900/20 border border-amber-600/30 px-3 py-2 text-[11px] text-amber-200/90">
+          <strong>Block 2 note:</strong> no swap defined for {missingSwaps.join(', ')} — same exercise will repeat next block.
         </div>
       )}
 

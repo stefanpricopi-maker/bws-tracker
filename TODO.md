@@ -42,6 +42,20 @@ See [SPECS.md](./SPECS.md) for architecture.
 
 ---
 
+## Gata ✅ (evaluare critică — gap batch)
+
+- [x] `/api/forecast` + `/api/exercises` cu auth; paginare exercises API
+- [x] Validare `/api/logs` (`logValidation.ts`)
+- [x] Rate limit `macro-solver`; validare URL imagini exercises
+- [x] Race `fetchPrevStats`: generation counter + `AbortController`
+- [x] Forecaster: stagnare doar la cut, prag `-0.25 kg/săpt`
+- [x] Guard swap Block 2 (`missingBlock2Swaps`) + warning UI Logger
+- [x] MED warning (Logger + Player); warmup sets în Player
+- [x] `WorkoutPlayerProvider` (fără props drilling Dashboard → Logger)
+- [x] Teste: `logValidation`, `workoutSafety`, `missingBlock2Swaps`
+
+---
+
 ## Idei viitoare (neplanificate)
 
 - [ ] Înregistrare user nou (signup) + invite
@@ -51,4 +65,4 @@ See [SPECS.md](./SPECS.md) for architecture.
 
 ---
 
-*Actualizat: 2026-05-29*
+*Actualizat: 2026-05-29 (gap batch evaluare)*

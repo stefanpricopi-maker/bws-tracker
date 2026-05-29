@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { requireUser } from '../../lib/apiAuth';
+import { validateLogPatch } from '../../lib/logValidation';
 import { db } from '../../db';
 import { dailyLogs } from '../../db/schema';
 import { eq, and, gte, desc } from 'drizzle-orm';
@@ -77,14 +78,14 @@ export const POST: APIRoute = async ({ request }) => {
 
   const date = typeof body.date === 'string' ? body.date : new Date().toISOString().slice(0, 10);
 
-  const patch = {
-    ...(body.weight_kg   != null && { weightKg:    Number(body.weight_kg)   }),
-    ...(body.steps       != null && { steps:        Number(body.steps)       }),
-    ...(body.calories_in != null && { caloriesIn:   Number(body.calories_in) }),
-    ...(body.protein_g   != null && { proteinG:     Number(body.protein_g)   }),
-    ...(body.carbs_g     != null && { carbsG:       Number(body.carbs_g)     }),
-    ...(body.fat_g       != null && { fatG:         Number(body.fat_g)       }),
-  };
+  const validated = validateLogPatch(body);
+  if (!validated.ok) {
+    return new Response(JSON.stringify({ error: validated.error }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  const patch = validated.patch;
 
   // Manual upsert — check for existing row first
   const [existing] = await db

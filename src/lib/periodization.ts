@@ -118,6 +118,12 @@ export function getExerciseForBlock(name: string, block: number): string {
   return EXERCISE_SWAP[name]?.block2 ?? name;
 }
 
+/** Split exercises with no Block 2 swap defined (silent fallback today). */
+export function missingBlock2Swaps(exerciseNames: string[]): string[] {
+  const unique = [...new Set(exerciseNames)];
+  return unique.filter((name) => !EXERCISE_SWAP[name]);
+}
+
 /**
  * Returns weeks elapsed since blockStartDate (ISO string).
  */
