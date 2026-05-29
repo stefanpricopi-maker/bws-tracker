@@ -14,6 +14,8 @@ import GoalForecaster       from './GoalForecaster';
 import ExerciseManager      from './ExerciseManager';
 import WorkoutPlayer        from './WorkoutPlayer';
 import type { PlannedExercise } from './WorkoutPlayer';
+import DailyActionHero      from './DailyActionHero';
+import Onboarding, { needsOnboarding, markOnboardingDone } from './Onboarding';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
@@ -35,15 +37,26 @@ const NAV: NavItem[] = [
 
 // ── Dashboard tab content ──────────────────────────────────────────────────
 
-function DashboardTab() {
+interface DashboardTabProps {
+  onNavigate: (tab: Tab) => void;
+}
+
+function DashboardTab({ onNavigate }: DashboardTabProps) {
   return (
     <div className="flex flex-col gap-6">
-      <AlertBanner />
-      <GoalForecaster />
-      <ConsistencyHeatmap />
+      <DailyActionHero onNavigate={onNavigate} />
       <StepTracker />
-      <WeeklyCheckIn />
-      <WeeklySummary />
+
+      <div className="flex flex-col gap-4">
+        <p className="text-xs font-semibold uppercase tracking-widest text-gray-600 px-0.5">
+          Insights
+        </p>
+        <AlertBanner />
+        <GoalForecaster />
+        <ConsistencyHeatmap />
+        <WeeklyCheckIn />
+        <WeeklySummary />
+      </div>
     </div>
   );
 }
@@ -135,6 +148,7 @@ export default function Dashboard() {
   const [active, setActive]         = useState<Tab>('dashboard');
   const [googleAuthMsg, setGoogleAuthMsg] = useState<{ text: string; color: string } | null>(null);
   const [player, setPlayer]         = useState<PlayerState | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   function startPlayer(exercises: PlannedExercise[], dayType: string) {
     setPlayer({ exercises, dayType });
@@ -160,8 +174,34 @@ export default function Dashboard() {
     }
   }, []);
 
+  // Show onboarding for first-time users (skip if goals already configured)
+  useEffect(() => {
+    if (!needsOnboarding()) return;
+    fetch('/api/profile')
+      .then((r) => r.json())
+      .then((profile: { goals?: { targetWeightKg?: number | null } | null }) => {
+        if (profile.goals?.targetWeightKg != null) {
+          markOnboardingDone();
+          return;
+        }
+        fetch('/api/logs?days=30')
+          .then((r2) => r2.json())
+          .then((logs: Array<{ weight_kg?: number | null }>) => {
+            const hasWeight = logs.some((l) => l.weight_kg != null);
+            if (hasWeight) markOnboardingDone();
+            else setShowOnboarding(true);
+          })
+          .catch(() => setShowOnboarding(true));
+      })
+      .catch(() => setShowOnboarding(true));
+  }, []);
+
   return (
     <>
+      {showOnboarding && (
+        <Onboarding onComplete={() => setShowOnboarding(false)} />
+      )}
+
       {/* WorkoutPlayer full-screen overlay */}
       {player && (
         <WorkoutPlayer
@@ -208,7 +248,7 @@ export default function Dashboard() {
 
       {/* Page content */}
       <div className="flex-1 overflow-y-auto px-4 pt-6 pb-8">
-        {active === 'dashboard' && <DashboardTab />}
+        {active === 'dashboard' && <DashboardTab onNavigate={setActive} />}
         {active === 'workout'   && <WorkoutTab onStartPlayer={startPlayer} />}
         {active === 'diet'      && <DietTracker />}
         {active === 'stats'     && <StatsTab />}
