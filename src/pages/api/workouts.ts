@@ -3,6 +3,7 @@ import { db } from '../../db';
 import { workouts, workoutSets } from '../../db/schema';
 import { eq, desc, and } from 'drizzle-orm';
 import { detectDeload } from '../../lib/fitness';
+import { validateBulkSetRow } from '../../lib/workoutValidation';
 
 const USER_ID = 1;
 
@@ -98,24 +99,26 @@ export const POST: APIRoute = async ({ request }) => {
 
   const workoutId = inserted.id;
 
+  let savedCount = 0;
   for (const s of rawSets) {
-    if (
-      typeof s === 'object' &&
-      s !== null &&
-      typeof s.exerciseName === 'string' &&
-      typeof s.weight === 'number' &&
-      typeof s.reps === 'number' &&
-      typeof s.setNumber === 'number'
-    ) {
-      await db.insert(workoutSets)
-        .values({
-          workoutId,
-          exerciseName: s.exerciseName,
-          weight: s.weight,
-          reps: s.reps,
-          setNumber: s.setNumber,
-        });
-    }
+    const validated = validateBulkSetRow(s);
+    if (!validated) continue;
+    await db.insert(workoutSets).values({
+      workoutId,
+      exerciseName: validated.exerciseName,
+      weight:       validated.weight,
+      reps:         validated.reps,
+      setNumber:    validated.setNumber,
+    });
+    savedCount++;
+  }
+
+  if (rawSets.length > 0 && savedCount === 0) {
+    await db.delete(workouts).where(eq(workouts.id, workoutId));
+    return new Response(
+      JSON.stringify({ error: 'No valid sets in payload. Check weight (0–500 kg) and reps (1–100).' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } },
+    );
   }
 
   return new Response(JSON.stringify({ ok: true, workoutId }), {

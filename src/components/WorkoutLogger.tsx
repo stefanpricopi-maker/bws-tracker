@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { autoRegulate as autoRegulateCalc, calcDeloadWeight } from '../lib/fitness';
+import { autoRegulate as autoRegulateCalc, calcDeloadWeight, weightIncrementKg } from '../lib/fitness';
 import { getExerciseForBlock, EXERCISE_SWAP, MESOCYCLE_WEEKS } from '../lib/periodization';
 import type { PlannedExercise } from './WorkoutPlayer';
 import ExerciseManager from './ExerciseManager';
@@ -336,7 +336,11 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
             targetWeight = calcDeloadWeight(r.maxWeight);
             targetReps   = 10;
           } else {
-            ({ targetWeight, targetReps, isWeightIncrease } = autoRegulate(r.maxWeight ?? null, r.maxReps ?? null));
+            ({ targetWeight, targetReps, isWeightIncrease } = autoRegulate(
+              r.maxWeight ?? null,
+              r.maxReps ?? null,
+              ex.name,
+            ));
           }
           // Set 1: weight + reps pre-filled. Sets 2+: weight only (reps left empty to fill as lifted).
           const preFilled = ex.sets.map((s, si) => ({
@@ -385,6 +389,7 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
             ({ targetWeight, targetReps, isWeightIncrease } = autoRegulate(
               r.maxWeight ?? null,
               r.maxReps   ?? null,
+              ex.name,
             ));
           }
 
@@ -980,7 +985,7 @@ export default function WorkoutLogger({ onStartPlayer }: WorkoutLoggerProps = {}
                   {/* Phase 12: weight-increase indicator (only when no deload) */}
                   {ex.isWeightIncrease && !ex.needsDeload && !medMode && (
                     <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/30">
-                      ⬆️ +2.5 kg
+                      ⬆️ +{weightIncrementKg(ex.name)} kg
                     </span>
                   )}
                   {badge && (

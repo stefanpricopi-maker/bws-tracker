@@ -1,53 +1,39 @@
 /**
- * POST /api/workout-set
- *
- * Saves a single set during an active workout session.
- * - If `workout_id` is omitted, a new workout record is created and its id returned.
- * - Subsequent calls pass the returned `workout_id` to append sets to the same session.
- *
- * Body: {
- *   workout_id?:    number   // omit on first call
- *   day_type?:      string   // required only on first call (e.g. "Push")
- *   exercise_name:  string
- *   weight:         number
- *   reps:           number
- *   set_number:     number
- * }
- *
- * Response: { workout_id: number }
+ * POST /api/workout-set — save one set during an active player session.
+ * DELETE /api/workout-set?workout_id=N — remove incomplete session (quit mid-workout).
  */
 import type { APIRoute } from 'astro';
 import { db } from '../../db';
 import { workouts, workoutSets } from '../../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
+import { validateSetPayload } from '../../lib/workoutValidation';
 
 const USER_ID = 1;
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const body = await request.json() as {
-      workout_id?:    number;
-      day_type?:      string;
-      exercise_name:  string;
-      weight:         number;
-      reps:           number;
-      set_number:     number;
-    };
+    const body = await request.json() as Record<string, unknown>;
 
-    const { exercise_name, weight, reps, set_number } = body;
+    const validated = validateSetPayload({
+      exercise_name: body.exercise_name,
+      weight:        body.weight,
+      reps:          body.reps,
+      set_number:    body.set_number,
+    });
 
-    if (!exercise_name || weight == null || reps == null || set_number == null) {
-      return new Response(
-        JSON.stringify({ error: 'exercise_name, weight, reps, and set_number are required.' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
-      );
+    if (!validated.ok) {
+      return new Response(JSON.stringify({ error: validated.error }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    let workoutId = body.workout_id;
+    const { exerciseName, weight, reps, setNumber } = validated.data;
 
-    if (!workoutId) {
-      // Create a new workout session
-      const dayType = body.day_type ?? 'Workout';
+    let workoutId = typeof body.workout_id === 'number' ? body.workout_id : Number(body.workout_id);
+
+    if (!workoutId || !Number.isInteger(workoutId)) {
+      const dayType = typeof body.day_type === 'string' ? body.day_type : 'Workout';
       const today   = new Date().toISOString().slice(0, 10);
       const [created] = await db
         .insert(workouts)
@@ -55,11 +41,10 @@ export const POST: APIRoute = async ({ request }) => {
         .returning({ id: workouts.id });
       workoutId = created.id;
     } else {
-      // Verify the workout exists (guard against stale IDs)
       const [existing] = await db
         .select({ id: workouts.id })
         .from(workouts)
-        .where(eq(workouts.id, workoutId))
+        .where(and(eq(workouts.id, workoutId), eq(workouts.userId, USER_ID)))
         .limit(1);
       if (!existing) {
         return new Response(
@@ -71,10 +56,10 @@ export const POST: APIRoute = async ({ request }) => {
 
     await db.insert(workoutSets).values({
       workoutId,
-      exerciseName: exercise_name,
+      exerciseName,
       weight,
       reps,
-      setNumber: set_number,
+      setNumber,
     });
 
     return new Response(
@@ -88,4 +73,35 @@ export const POST: APIRoute = async ({ request }) => {
       { status: 500, headers: { 'Content-Type': 'application/json' } },
     );
   }
+};
+
+/** Delete a partial workout so it does not pollute auto-regulation history. */
+export const DELETE: APIRoute = async ({ url }) => {
+  const workoutId = parseInt(url.searchParams.get('workout_id') ?? '', 10);
+  if (!Number.isInteger(workoutId) || workoutId < 1) {
+    return new Response(JSON.stringify({ error: 'workout_id query param required.' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const [row] = await db
+    .select({ id: workouts.id })
+    .from(workouts)
+    .where(and(eq(workouts.id, workoutId), eq(workouts.userId, USER_ID)))
+    .limit(1);
+
+  if (!row) {
+    return new Response(JSON.stringify({ error: 'Workout not found.' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  await db.delete(workouts).where(eq(workouts.id, workoutId));
+
+  return new Response(JSON.stringify({ ok: true, deleted: workoutId }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
 };

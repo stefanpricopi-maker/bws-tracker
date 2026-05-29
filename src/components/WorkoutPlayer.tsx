@@ -103,7 +103,11 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
           targetWeight = calcDeloadWeight(r.maxWeight);
           targetReps   = 10;
         } else {
-          ({ targetWeight, targetReps } = autoRegulateCalc(r.maxWeight ?? null, r.maxReps ?? null));
+          ({ targetWeight, targetReps } = autoRegulateCalc(
+            r.maxWeight ?? null,
+            r.maxReps ?? null,
+            ex.name,
+          ));
         }
         statsMap[ex.name] = {
           targetWeight,
@@ -174,6 +178,22 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
     }
     setSaveError(null);
   }, [exIdx, setIdx, exercises, stats]);
+
+  async function abandonSession() {
+    if (workoutId == null) return;
+    try {
+      await fetch(`/api/workout-set?workout_id=${workoutId}`, { method: 'DELETE' });
+    } catch {
+      /* best effort — partial session must not affect history */
+    }
+    setWorkoutId(null);
+  }
+
+  async function handleQuitConfirmed() {
+    setConfirmQuit(false);
+    if (phase !== 'complete') await abandonSession();
+    onClose();
+  }
 
   const skipExercise = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -383,11 +403,13 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
                 <p className="text-2xl mb-2">🚪</p>
                 <p className="text-white font-bold text-lg">Quit workout?</p>
                 <p className="text-gray-400 text-sm mt-1">
-                  {setsLogged > 0 ? `${setsLogged} set${setsLogged !== 1 ? 's' : ''} saved so far will be kept.` : 'No sets saved yet.'}
+                  {setsLogged > 0
+                    ? `${setsLogged} partial set${setsLogged !== 1 ? 's' : ''} will be discarded so they do not affect your history.`
+                    : 'No sets saved yet.'}
                 </p>
               </div>
               <div className="flex flex-col gap-2">
-                <button onClick={() => { setConfirmQuit(false); onClose(); }} className="min-h-[52px] w-full bg-red-600 hover:bg-red-500 text-white font-bold text-base rounded-2xl transition-colors">Yes, quit</button>
+                <button type="button" onClick={() => void handleQuitConfirmed()} className="min-h-[52px] w-full bg-red-600 hover:bg-red-500 text-white font-bold text-base rounded-2xl transition-colors">Yes, quit</button>
                 <button onClick={() => setConfirmQuit(false)} className="min-h-[52px] w-full bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-semibold text-base rounded-2xl transition-colors">Continue workout</button>
               </div>
             </div>
@@ -617,13 +639,14 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
                 <p className="text-white font-bold text-lg">Quit workout?</p>
                 <p className="text-gray-400 text-sm mt-1">
                   {setsLogged > 0
-                    ? `${setsLogged} set${setsLogged !== 1 ? 's' : ''} saved so far will be kept.`
+                    ? `${setsLogged} partial set${setsLogged !== 1 ? 's' : ''} will be discarded so they do not affect your history.`
                     : 'No sets have been saved yet.'}
                 </p>
               </div>
               <div className="flex flex-col gap-2">
                 <button
-                  onClick={() => { setConfirmQuit(false); onClose(); }}
+                  type="button"
+                  onClick={() => void handleQuitConfirmed()}
                   className="min-h-[52px] w-full bg-red-600 hover:bg-red-500 text-white font-bold text-base rounded-2xl transition-colors"
                 >
                   Yes, quit

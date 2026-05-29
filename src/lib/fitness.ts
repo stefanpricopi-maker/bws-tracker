@@ -3,6 +3,8 @@
 // Used by API routes and React components; tested independently via Vitest.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { isIsolationExercise } from './restDuration';
+
 // ── Primitives ────────────────────────────────────────────────────────────────
 
 export function clamp(val: number, min: number, max: number): number {
@@ -102,17 +104,23 @@ export interface AutoRegulateResult {
   isWeightIncrease: boolean;
 }
 
+/** Weight jump when Rule A applies: +1 kg isolation, +2.5 kg compound. */
+export function weightIncrementKg(exerciseName?: string): number {
+  return exerciseName && isIsolationExercise(exerciseName) ? 1 : 2.5;
+}
+
 export function autoRegulate(
   maxWeight: number | null,
   maxReps:   number | null,
+  exerciseName?: string,
 ): AutoRegulateResult {
   if (maxWeight === null || maxReps === null) {
     return { targetWeight: null, targetReps: null, isWeightIncrease: false };
   }
   if (maxReps >= 10) {
-    // Rule A: hit upper hypertrophy bound → progress weight
+    const inc = weightIncrementKg(exerciseName);
     return {
-      targetWeight:     Math.round((maxWeight + 2.5) * 100) / 100,
+      targetWeight:     Math.round((maxWeight + inc) * 100) / 100,
       targetReps:       8,
       isWeightIncrease: true,
     };

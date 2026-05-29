@@ -175,6 +175,17 @@ describe('autoRegulate', () => {
     expect(r.targetReps).toBe(10);
     expect(r.isWeightIncrease).toBe(false);
   });
+
+  it('Rule A: isolation uses +1 kg not +2.5 kg', () => {
+    const r = autoRegulate(12, 10, 'Dumbbell Biceps Curl');
+    expect(r.targetWeight).toBe(13);
+    expect(r.isWeightIncrease).toBe(true);
+  });
+
+  it('Rule A: compound still uses +2.5 kg', () => {
+    const r = autoRegulate(40, 10, 'Dumbbell Floor Press');
+    expect(r.targetWeight).toBe(42.5);
+  });
 });
 
 // ── rollingAverage ────────────────────────────────────────────────────────────
