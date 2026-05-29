@@ -2,9 +2,12 @@ import { useState, useEffect } from 'react';
 import {
   classifyDay as classify,
   calcStreak,
+  deficitPercentOfTdee,
+  formatDeficitPercentLabel,
+  heatmapDeficitBandsFromGoals,
   heatmapThresholdsFromTdeeDeficit,
 } from '../lib/fitness';
-import type { DayStatus, DayData, HeatmapThresholds } from '../lib/fitness';
+import type { DayStatus, DayData, HeatmapDeficitBands, HeatmapThresholds } from '../lib/fitness';
 
 const STATUS_STYLE: Record<DayStatus, { bg: string; label: string }> = {
   ideal:   { bg: 'bg-emerald-500',          label: 'Ideal'   },
@@ -32,6 +35,27 @@ function shortDate(dateStr: string): string {
   return `${d.getDate()}/${d.getMonth() + 1}`;
 }
 
+function dayTooltip(data: DayData, tdeeKcal: number | null): string {
+  const calStr  = data.calories !== null ? `${data.calories} kcal` : 'no calories';
+  const stepStr = data.steps    !== null ? `${data.steps.toLocaleString()} steps` : 'no steps';
+  const parts   = [`${shortDate(data.date)} ${shortDay(data.date)}`, calStr, stepStr];
+
+  if (tdeeKcal != null && tdeeKcal > 0 && data.calories != null && data.calories > 0) {
+    parts.push(formatDeficitPercentLabel(deficitPercentOfTdee(tdeeKcal, data.calories)));
+  }
+
+  return parts.join(' · ');
+}
+
+function idealLegendDesc(t: HeatmapThresholds, bands: HeatmapDeficitBands | null): string {
+  const steps = `${t.stepMin.toLocaleString()} steps`;
+  if (bands) {
+    const pct = `${Math.round(bands.minDeficitPct)}–${Math.round(bands.maxDeficitPct)}% below TDEE`;
+    return `${pct} (${t.calMin}–${t.calMax} kcal) + ${steps}`;
+  }
+  return `${t.calMin}–${t.calMax} kcal + ${steps}`;
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 interface LogRow {
@@ -43,6 +67,8 @@ interface LogRow {
 export default function ConsistencyHeatmap() {
   const [days, setDays]       = useState<{ date: string; status: DayStatus; data: DayData }[]>([]);
   const [thresholds, setThresholds] = useState<HeatmapThresholds | null>(null);
+  const [tdeeKcal, setTdeeKcal]       = useState<number | null>(null);
+  const [deficitBands, setDeficitBands] = useState<HeatmapDeficitBands | null>(null);
   const [loading, setLoading] = useState(true);
   const [tooltip, setTooltip] = useState<string | null>(null);
 
@@ -58,8 +84,11 @@ export default function ConsistencyHeatmap() {
           targetSteps?: number | null;
         } | null;
       }]) => {
-        const t = heatmapThresholdsFromTdeeDeficit(profile.goals ?? null);
+        const goals = profile.goals ?? null;
+        const t = heatmapThresholdsFromTdeeDeficit(goals);
         setThresholds(t);
+        setTdeeKcal(goals?.tdeeKcal ?? null);
+        setDeficitBands(heatmapDeficitBandsFromGoals(goals));
         const logMap = new Map(rows.map((r) => [r.date, r]));
         const dates  = buildDateRange(30);
 
@@ -119,9 +148,7 @@ export default function ConsistencyHeatmap() {
       >
         {days.map(({ date, status, data }) => {
           const { bg } = STATUS_STYLE[status];
-          const calStr  = data.calories !== null ? `${data.calories} kcal` : 'no calories';
-          const stepStr = data.steps    !== null ? `${data.steps.toLocaleString()} steps` : 'no steps';
-          const tip     = `${shortDate(date)} ${shortDay(date)} · ${calStr} · ${stepStr}`;
+          const tip = dayTooltip(data, tdeeKcal);
 
           return (
             <button
@@ -151,7 +178,7 @@ export default function ConsistencyHeatmap() {
       {/* Legend */}
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-gray-900/60 border border-gray-700/50 px-3 py-2.5">
         {([
-          { bg: 'bg-emerald-500', label: 'Ideal day',    desc: thresholds ? `${thresholds.calMin}–${thresholds.calMax} kcal + ${thresholds.stepMin.toLocaleString()} steps` : 'On target calories + steps' },
+          { bg: 'bg-emerald-500', label: 'Ideal day',    desc: thresholds ? idealLegendDesc(thresholds, deficitBands) : 'On target calories + steps' },
           { bg: 'bg-emerald-300', label: 'Active day',   desc: thresholds ? `${thresholds.stepMin.toLocaleString()}+ steps only` : 'Steps hit' },
           { bg: 'bg-red-500',     label: 'Surplus day',  desc: thresholds ? `Calories above ${thresholds.calMax}` : 'Over calorie target' },
           { bg: 'bg-gray-700',    label: 'Missed',        desc: 'No data logged' },

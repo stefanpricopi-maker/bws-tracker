@@ -248,8 +248,7 @@ Google Fit active calories: treated as **NEAT / activity**, not “sport burn”
 
 ## Consistency Heatmap
 
-30-day grid. Thresholds from `heatmapThresholdsFromGoals()` using profile `user_goals` (calories ±15%, steps target).  
-**Future:** % deficit vs TDEE for calorie bands ([TODO.md](./TODO.md)).
+30-day grid. When `user_goals.tdee_kcal` is set, thresholds from `heatmapThresholdsFromTdeeDeficit()` (target deficit ±15% relative, mapped to kcal); otherwise `heatmapThresholdsFromGoals()`. Tooltips show `formatDeficitPercentLabel()` per logged day.
 
 ---
 

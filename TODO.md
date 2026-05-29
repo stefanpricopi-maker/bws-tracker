@@ -63,7 +63,7 @@ See [SPECS.md](./SPECS.md) for architecture.
 ## Idei viitoare (neplanificate)
 
 - [ ] Înregistrare user nou (signup) + invite
-- [ ] Heatmap ținte din `%` deficit față de TDEE
+- [x] Heatmap ținte din `%` deficit față de TDEE
 - [ ] Apple Health / Health Connect
 - [ ] Offline workout queue
 

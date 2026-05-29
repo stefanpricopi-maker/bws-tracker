@@ -221,6 +221,14 @@ export function deficitPercentOfTdee(tdeeKcal: number, eatenKcal: number): numbe
   return ((tdeeKcal - eatenKcal) / tdeeKcal) * 100;
 }
 
+/** Human-readable deficit vs TDEE for heatmap tooltips. */
+export function formatDeficitPercentLabel(deficitPct: number): string {
+  const n = Math.round(deficitPct * 10) / 10;
+  if (n > 0) return `${n}% below TDEE`;
+  if (n < 0) return `${Math.abs(n)}% above TDEE`;
+  return 'at TDEE';
+}
+
 /** Intake at a given deficit % below TDEE (0% = maintenance). */
 export function caloriesAtDeficitPercent(tdeeKcal: number, deficitPercent: number): number {
   return Math.round(tdeeKcal * (1 - deficitPercent / 100));

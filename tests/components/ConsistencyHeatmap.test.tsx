@@ -62,8 +62,19 @@ describe('ConsistencyHeatmap', () => {
   it('legend uses TDEE deficit bands when profile has tdee', async () => {
     mockFetch([], { tdeeKcal: 2500, targetCaloriesKcal: 2000, targetSteps: 8000 });
     render(<ConsistencyHeatmap />);
-    const legend = await screen.findByText(/1925–2075 kcal \+ 8,000 steps/i);
+    const legend = await screen.findByText(/17–23% below TDEE \(1925–2075 kcal\) \+ 8,000 steps/i);
     expect(legend).toBeInTheDocument();
+  });
+
+  it('tooltip shows deficit % vs TDEE when day has calories', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    mockFetch(
+      [{ date: today, caloriesIn: 2000, steps: 9000 }],
+      { tdeeKcal: 2500, targetCaloriesKcal: 2000, targetSteps: 8000 },
+    );
+    render(<ConsistencyHeatmap />);
+    const cell = await screen.findByRole('button', { name: new RegExp(`20% below TDEE`) });
+    expect(cell).toBeInTheDocument();
   });
 
   it('displays non-zero streak when recent days are ideal', async () => {

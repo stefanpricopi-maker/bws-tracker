@@ -10,6 +10,7 @@ import {
   heatmapThresholdsFromTdeeDeficit,
   heatmapDeficitBandsFromGoals,
   deficitPercentOfTdee,
+  formatDeficitPercentLabel,
   caloriesAtDeficitPercent,
   calcStreak,
   calcEatBack,
@@ -251,6 +252,14 @@ describe('deficitPercentOfTdee', () => {
 
   it('returns negative when above TDEE', () => {
     expect(deficitPercentOfTdee(2500, 2600)).toBe(-4);
+  });
+});
+
+describe('formatDeficitPercentLabel', () => {
+  it('formats deficit, surplus, and maintenance', () => {
+    expect(formatDeficitPercentLabel(20)).toBe('20% below TDEE');
+    expect(formatDeficitPercentLabel(-4)).toBe('4% above TDEE');
+    expect(formatDeficitPercentLabel(0)).toBe('at TDEE');
   });
 });
 
