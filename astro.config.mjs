@@ -9,6 +9,9 @@ export default defineConfig({
   output: 'server',
   adapter: vercel(),
   integrations: [react()],
+  devToolbar: {
+    enabled: process.env.PLAYWRIGHT !== '1',
+  },
 
   vite: {
     plugins: [tailwindcss()]

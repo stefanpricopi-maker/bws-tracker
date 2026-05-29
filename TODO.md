@@ -56,6 +56,7 @@ See [SPECS.md](./SPECS.md) for architecture.
 - [x] Paginare UI Exercise Library (`limit`/`offset` + filtru categorie)
 - [x] Erori AI uniforme (`src/lib/aiApi.ts`)
 - [x] Teste API integrare: `workout-set`, `exercises`, `generate-weekly-plan`
+- [x] E2E Playwright Workout Player (warmup → save → rest)
 
 ---
 

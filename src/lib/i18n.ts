@@ -3,6 +3,7 @@ export type Locale = 'en' | 'ro';
 const STRINGS: Record<Locale, Record<string, string>> = {
   en: {
     nav_home: 'Home',
+    nav_dashboard: 'Home',
     nav_workout: 'Workout',
     nav_diet: 'Diet',
     nav_stats: 'Stats',
@@ -14,6 +15,7 @@ const STRINGS: Record<Locale, Record<string, string>> = {
   },
   ro: {
     nav_home: 'Acasă',
+    nav_dashboard: 'Acasă',
     nav_workout: 'Antrenament',
     nav_diet: 'Dietă',
     nav_stats: 'Statistici',

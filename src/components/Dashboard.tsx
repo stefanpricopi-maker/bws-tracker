@@ -154,6 +154,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab === 'dashboard' || tab === 'workout' || tab === 'diet' || tab === 'stats' || tab === 'profile') {
+      setActive(tab);
+    }
     const status = params.get('google_auth');
     if (status && GOOGLE_AUTH_MESSAGES[status]) {
       setGoogleAuthMsg(GOOGLE_AUTH_MESSAGES[status]);
@@ -219,6 +223,7 @@ export default function Dashboard() {
 
       {/* Top navigation bar */}
       <nav
+        aria-label="Main"
         className="sticky top-0 z-50 w-full
                    flex items-center justify-around
                    border-b border-gray-800 bg-gray-900/95 backdrop-blur-sm
@@ -228,6 +233,8 @@ export default function Dashboard() {
         {NAV.map(({ id, label, icon }) => (
           <button
             key={id}
+            type="button"
+            data-testid={`nav-${id}`}
             onClick={() => setActive(id)}
             className={`flex flex-col items-center gap-0.5 px-3 py-1 text-xs font-medium
                         transition-colors duration-150 bg-transparent border-0 cursor-pointer
@@ -243,7 +250,11 @@ export default function Dashboard() {
       <WorkoutPlayerProvider startPlayer={startPlayer}>
       <div className="flex-1 overflow-y-auto px-4 pt-6 pb-8">
         {active === 'dashboard' && <DashboardTab onNavigate={setActive} />}
-        {active === 'workout'   && <WorkoutTab />}
+        {active === 'workout'   && (
+          <div data-testid="workout-panel">
+            <WorkoutTab />
+          </div>
+        )}
         {active === 'diet'      && <DietTracker />}
         {active === 'stats'     && <StatsTab />}
         {active === 'profile'   && (

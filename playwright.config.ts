@@ -24,9 +24,9 @@ export default defineConfig({
   // Starts the dev server automatically before E2E tests.
   // Use `reuseExistingServer: true` so running `npm run dev` manually also works.
   webServer: {
-    command: 'npm run dev',
+    command: 'PLAYWRIGHT=1 npm run dev',
     url: 'http://localhost:4321',
-    reuseExistingServer: true,
+    reuseExistingServer: process.env.PW_REUSE_SERVER === '1',
     timeout: 30_000,
   },
 });

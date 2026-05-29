@@ -298,7 +298,7 @@ Build: `cd mcp-server && npm run build` — configure path in `~/.cursor/mcp.jso
 
 | Path | Layout | Content |
 |---|---|---|
-| `/` | `Layout.astro` | `Dashboard` + `InstallPrompt` |
+| `/` | `Layout.astro` | `Dashboard` + `InstallPrompt` (`?tab=workout` etc. deep-links to a tab) |
 | `/weight` | `AppLayout.astro` | SSR weight chart + `BottomNav` |
 
 ---

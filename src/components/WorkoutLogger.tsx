@@ -773,6 +773,7 @@ export default function WorkoutLogger({ onStartPlayer: onStartPlayerProp }: Work
       <div className="rounded-2xl border border-violet-500/30 bg-violet-900/10 overflow-hidden">
         <button
           type="button"
+          data-testid="ai-planner-toggle"
           onClick={() => setPlannerOpen((o) => !o)}
           className="w-full flex items-center justify-between px-4 py-3 text-left"
         >
@@ -791,6 +792,7 @@ export default function WorkoutLogger({ onStartPlayer: onStartPlayerProp }: Work
             {!aiPlan && (
               <button
                 type="button"
+                data-testid="generate-weekly-plan"
                 onClick={generatePlan}
                 disabled={generatingPlan}
                 className="min-h-[44px] w-full bg-violet-600 hover:bg-violet-500 active:bg-violet-700
@@ -841,6 +843,7 @@ export default function WorkoutLogger({ onStartPlayer: onStartPlayerProp }: Work
                           <div className="flex flex-col gap-1.5 items-end flex-shrink-0 ml-2">
                             <button
                               type="button"
+                              data-testid="start-player"
                               onClick={() => onStartPlayer(
                                 d.exercises.map((e) => ({
                                   name: e.name,

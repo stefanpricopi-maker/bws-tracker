@@ -1,9 +1,13 @@
 import { test, expect } from '@playwright/test';
 
+import { skipOnboarding, mockWorkoutPlayerApis } from './helpers/workout-api-mocks';
+
 test.describe('Workout Logger', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.getByRole('button', { name: /workout/i }).click();
+    await skipOnboarding(page);
+    await mockWorkoutPlayerApis(page);
+    await page.goto('/?tab=workout');
+    await expect(page.getByTestId('workout-panel')).toBeVisible();
   });
 
   test('shows the 7-day split selector', async ({ page }) => {
@@ -17,7 +21,7 @@ test.describe('Workout Logger', () => {
     await day1.click();
 
     // Should show at least one exercise from the Push day
-    await expect(page.getByText(/bench press|overhead press/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Dumbbell Floor Press' })).toBeVisible();
   });
 
   test('exercise inputs are pre-populated or accept manual entry', async ({ page }) => {

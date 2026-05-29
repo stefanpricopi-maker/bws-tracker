@@ -298,7 +298,7 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
       <div className="fixed inset-0 z-50 flex justify-center bg-black/60">
         <div className="w-full max-w-md bg-gray-950 flex flex-col items-center justify-center gap-4">
           <div className="w-12 h-12 rounded-full border-4 border-violet-600 border-t-transparent animate-spin" />
-          <p className="text-gray-400 text-sm">Loading exercise data...</p>
+          <p className="text-gray-400 text-sm" data-testid="player-loading">Loading exercise data...</p>
         </div>
       </div>
     );
@@ -400,6 +400,8 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
         {/* Skip + Quit buttons */}
         <div className="w-full flex flex-col gap-2">
           <button
+            type="button"
+            data-testid="skip-rest"
             onClick={() => {
               if (timerRef.current) clearInterval(timerRef.current);
               advanceAfterRest();
@@ -693,6 +695,7 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
           <>
             <button
               type="button"
+              data-testid="warmup-done"
               onClick={() => setWarmupDone((d) => ({ ...d, [exIdx]: true }))}
               className="w-full min-h-[64px] bg-sky-600 hover:bg-sky-500 text-white font-black text-xl tracking-wide rounded-2xl transition-colors"
             >
@@ -715,6 +718,8 @@ export default function WorkoutPlayer({ exercises, dayType, onComplete, onClose 
           )}
         </p>
         <button
+          type="button"
+          data-testid="save-set"
           onClick={handleSaveSet}
           disabled={saving}
           className="w-full min-h-[64px] bg-violet-600 hover:bg-violet-500 active:bg-violet-700
