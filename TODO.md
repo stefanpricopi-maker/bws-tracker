@@ -55,6 +55,7 @@ See [SPECS.md](./SPECS.md) for architecture.
 - [x] Teste: `logValidation`, `workoutSafety`, `missingBlock2Swaps`
 - [x] Paginare UI Exercise Library (`limit`/`offset` + filtru categorie)
 - [x] Erori AI uniforme (`src/lib/aiApi.ts`)
+- [x] Teste API integrare: `workout-set`, `exercises`, `generate-weekly-plan`
 
 ---
 

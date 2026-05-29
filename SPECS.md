@@ -16,7 +16,7 @@
 | Database (local/Docker) | LibSQL (`@libsql/client`) via Drizzle ORM — `file:./bws.db` |
 | Database (production) | Turso (LibSQL cloud) — `libsql://...turso.io` |
 | Charts | Recharts |
-| Tests | Vitest (`src/lib/*.test.ts`) · Playwright (`e2e/`) |
+| Tests | Vitest (`src/lib/*.test.ts`, `tests/integration/*`) · Playwright (`e2e/`) |
 | CI | GitHub Actions — `npm test` + `npm run build` |
 | MCP Server | `@modelcontextprotocol/sdk` + `sql.js` (WASM) |
 | Wearable Data | Google Fit REST API (OAuth2 via `googleapis`) |

@@ -92,6 +92,17 @@ export async function initSchema(client: ReturnType<typeof createClient>) {
       expiry_date   INTEGER,
       updated_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     );
+
+    CREATE TABLE IF NOT EXISTS exercises (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      name          TEXT    NOT NULL UNIQUE,
+      target_muscle TEXT    NOT NULL,
+      category      TEXT    NOT NULL,
+      image_url     TEXT,
+      is_custom     INTEGER NOT NULL DEFAULT 0,
+      is_archived   INTEGER NOT NULL DEFAULT 0,
+      created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    );
   `);
 }
 
