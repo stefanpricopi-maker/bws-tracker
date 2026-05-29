@@ -264,6 +264,8 @@ System prompt + last 7 days:
 
 Env: `AI_API_KEY`, `AI_API_BASE_URL`, `AI_MODEL`.
 
+**Errors:** All AI routes use `src/lib/aiApi.ts` — JSON `{ error, code, detail? }` with codes `ai_not_configured` (503), `ai_upstream` / `ai_network` (502), `ai_parse` (422), `ai_validation` (4xx/500).
+
 ---
 
 ## Google Fit Integration

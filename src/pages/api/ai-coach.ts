@@ -1,16 +1,15 @@
 import type { APIRoute } from 'astro';
 import { requireUser } from '../../lib/apiAuth';
+import {
+  aiJson,
+  aiNotConfiguredResponse,
+  catchAiRouteError,
+  chatCompletion,
+  getAiConfig,
+} from '../../lib/aiApi';
 import { db } from '../../db';
 import { dailyLogs } from '../../db/schema';
-import { eq, gte, desc } from 'drizzle-orm';
-
-// Reuse the same OpenAI-compatible env vars as the vision endpoint
-const BASE_URL = process.env['AI_API_BASE_URL'] ?? 'https://api.openai.com/v1';
-const API_KEY  = process.env['AI_API_KEY'];
-const MODEL    = process.env['AI_MODEL'] ?? 'gpt-4o';
-
-
-// ── Built-With-Science system prompt ─────────────────────────────────────────
+import { eq, desc } from 'drizzle-orm';
 
 function buildPrompt(
   data: Array<{ date: string; weight: number | null; calories: number | null; steps: number | null }>,
@@ -53,90 +52,54 @@ Rule 4: If calorie data is missing for 3 or more days, tell them to prioritize l
 Keep the response under 3 sentences. Be direct, no fluff. Do not repeat the numbers back at length — give the diagnosis and the single action to take.`;
 }
 
-// ── Route ─────────────────────────────────────────────────────────────────────
-
 export const GET: APIRoute = async ({ request }) => {
   const auth = await requireUser(request, 'ai-coach');
   if (auth instanceof Response) return auth;
   const { userId } = auth;
-  if (!API_KEY) {
-    return new Response(
-      JSON.stringify({ error: 'AI_API_KEY is not configured. Add it to your .env file.' }),
-      { status: 503, headers: { 'Content-Type': 'application/json' } },
-    );
-  }
 
-  // Fetch the last 7 days of daily_logs
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 6);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  if (!getAiConfig().apiKey) return aiNotConfiguredResponse();
 
-  const rows = await db
-    .select({
-      date:      dailyLogs.date,
-      weight:    dailyLogs.weightKg,
-      calories:  dailyLogs.caloriesIn,
-      steps:     dailyLogs.steps,
-    })
-    .from(dailyLogs)
-    .where(eq(dailyLogs.userId, userId))
-    .orderBy(desc(dailyLogs.date));
-
-  // Build a full 7-day window, filling missing dates with nulls
-  const logMap = new Map(rows.map((r) => [r.date, r]));
-  const window = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(cutoff);
-    d.setDate(d.getDate() + i);
-    const date = d.toISOString().slice(0, 10);
-    const r = logMap.get(date);
-    return { date, weight: r?.weight ?? null, calories: r?.calories ?? null, steps: r?.steps ?? null };
-  });
-
-  // Weight delta: newest minus oldest non-null weight entry
-  const withWeight = window.filter((d) => d.weight !== null);
-  const weightDelta =
-    withWeight.length >= 2
-      ? withWeight[withWeight.length - 1].weight! - withWeight[0].weight!
-      : null;
-
-  const prompt = buildPrompt(window, weightDelta);
-
-  // Call the LLM
   try {
-    const llmRes = await fetch(`${BASE_URL}/chat/completions`, {
-      method:  'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${API_KEY}`,
-      },
-      body: JSON.stringify({
-        model:    MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 220,
-        temperature: 0.4,
-      }),
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 6);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const rows = await db
+      .select({
+        date:      dailyLogs.date,
+        weight:    dailyLogs.weightKg,
+        calories:  dailyLogs.caloriesIn,
+        steps:     dailyLogs.steps,
+      })
+      .from(dailyLogs)
+      .where(eq(dailyLogs.userId, userId))
+      .orderBy(desc(dailyLogs.date));
+
+    const logMap = new Map(rows.map((r) => [r.date, r]));
+    const window = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(cutoff);
+      d.setDate(d.getDate() + i);
+      const date = d.toISOString().slice(0, 10);
+      const r = logMap.get(date);
+      return { date, weight: r?.weight ?? null, calories: r?.calories ?? null, steps: r?.steps ?? null };
     });
 
-    if (!llmRes.ok) {
-      const err = await llmRes.text();
-      throw new Error(`LLM API error ${llmRes.status}: ${err}`);
-    }
+    const withWeight = window.filter((d) => d.weight !== null);
+    const weightDelta =
+      withWeight.length >= 2
+        ? withWeight[withWeight.length - 1].weight! - withWeight[0].weight!
+        : null;
 
-    const json = await llmRes.json() as {
-      choices: Array<{ message: { content: string } }>;
-    };
+    const { model } = getAiConfig();
+    const advice = await chatCompletion({
+      model,
+      messages: [{ role: 'user', content: buildPrompt(window, weightDelta) }],
+      max_tokens: 220,
+      temperature: 0.4,
+    });
 
-    const advice = json.choices?.[0]?.message?.content?.trim() ?? 'No response from model.';
-
-    return new Response(
-      JSON.stringify({ advice, weightDelta, window }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    );
+    return aiJson({ advice, weightDelta, window });
   } catch (err) {
-    console.error('ai-coach error:', err);
-    return new Response(
-      JSON.stringify({ error: String(err) }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    );
+    return catchAiRouteError(err, 'ai-coach');
   }
 };

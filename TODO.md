@@ -54,6 +54,7 @@ See [SPECS.md](./SPECS.md) for architecture.
 - [x] `WorkoutPlayerProvider` (fără props drilling Dashboard → Logger)
 - [x] Teste: `logValidation`, `workoutSafety`, `missingBlock2Swaps`
 - [x] Paginare UI Exercise Library (`limit`/`offset` + filtru categorie)
+- [x] Erori AI uniforme (`src/lib/aiApi.ts`)
 
 ---
 

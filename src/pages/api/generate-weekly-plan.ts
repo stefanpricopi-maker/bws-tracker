@@ -1,12 +1,19 @@
 import type { APIRoute } from 'astro';
 import { requireUser } from '../../lib/apiAuth';
+import {
+  aiError,
+  aiJson,
+  aiNotConfiguredResponse,
+  catchAiRouteError,
+  chatCompletion,
+  getAiConfig,
+  jsonObjectFormat,
+  parseLlmJson,
+} from '../../lib/aiApi';
 import { db } from '../../db';
 import { exercises, mesocycles } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import { isDeloadWeek, deloadSetCount, weeksElapsed } from '../../lib/periodization';
-const BASE_URL = process.env['AI_API_BASE_URL'] ?? 'https://api.openai.com/v1';
-const API_KEY  = process.env['AI_API_KEY'];
-const MODEL    = process.env['AI_MODEL'] ?? 'gpt-4o';
 
 function systemPrompt(isDeload: boolean): string {
   const volumeNote = isDeload
@@ -57,12 +64,7 @@ export const GET: APIRoute = async ({ request }) => {
   const auth = await requireUser(request, 'generate-weekly-plan', 10);
   if (auth instanceof Response) return auth;
 
-  if (!API_KEY) {
-    return new Response(
-      JSON.stringify({ error: 'AI_API_KEY is not configured.' }),
-      { status: 503, headers: { 'Content-Type': 'application/json' } },
-    );
-  }
+  if (!getAiConfig().apiKey) return aiNotConfiguredResponse();
 
   try {
     const rows = await db
@@ -76,9 +78,10 @@ export const GET: APIRoute = async ({ request }) => {
       .orderBy(exercises.category, exercises.name);
 
     if (rows.length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'No exercises found in the database. Please seed the exercise library first.' }),
-        { status: 422, headers: { 'Content-Type': 'application/json' } },
+      return aiError(
+        'ai_validation',
+        'No exercises in the library. Seed or add exercises first.',
+        422,
       );
     }
 
@@ -91,53 +94,31 @@ export const GET: APIRoute = async ({ request }) => {
     const weeks = meso ? weeksElapsed(meso.blockStartDate) : 0;
     const isDeload = isDeloadWeek(weeks);
 
-    const body: Record<string, unknown> = {
-      model:       MODEL,
-      messages:    [
+    const { baseUrl, model } = getAiConfig();
+    const raw = await chatCompletion({
+      model,
+      messages: [
         { role: 'system', content: systemPrompt(isDeload) },
         { role: 'user',   content: buildUserPrompt(rows, isDeload) },
       ],
-      max_tokens:  1200,
+      max_tokens: 1200,
       temperature: 0.3,
-    };
-
-    if (!BASE_URL.includes('anthropic')) {
-      body.response_format = { type: 'json_object' };
-    }
-
-    const llmRes = await fetch(`${BASE_URL}/chat/completions`, {
-      method:  'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${API_KEY}`,
-      },
-      body: JSON.stringify(body),
+      ...jsonObjectFormat(baseUrl),
     });
 
-    if (!llmRes.ok) {
-      const errText = await llmRes.text();
-      throw new Error(`LLM API error ${llmRes.status}: ${errText}`);
-    }
-
-    const llmJson = await llmRes.json() as {
-      choices: Array<{ message: { content: string } }>;
-    };
-    const raw = llmJson.choices?.[0]?.message?.content?.trim() ?? '';
-
-    let plan: unknown;
-    try {
-      plan = JSON.parse(raw);
-    } catch {
-      throw new Error(`Model returned non-JSON: ${raw.slice(0, 300)}`);
-    }
+    const plan = parseLlmJson<{
+      split_type?: string;
+      days?: Array<{ day_name: string; category: string; exercises: Array<{ name: string; sets: number }> }>;
+      isDeloadWeek?: boolean;
+    }>(raw, 'Weekly plan was not valid JSON.');
 
     const validNames = new Set(rows.map((r) => r.name));
-    type PlanExercise = { name: string; sets: number };
-    type PlanDay = { day_name: string; category: string; exercises: PlanExercise[] };
-    const typed = plan as { split_type?: string; days?: PlanDay[]; isDeloadWeek?: boolean };
-    if (typed?.days) {
-      for (const day of typed.days) {
-        if (!Array.isArray(day.exercises)) { day.exercises = []; continue; }
+    if (plan?.days) {
+      for (const day of plan.days) {
+        if (!Array.isArray(day.exercises)) {
+          day.exercises = [];
+          continue;
+        }
         day.exercises = day.exercises
           .filter((ex) => {
             if (typeof ex !== 'object' || ex === null) return false;
@@ -154,17 +135,10 @@ export const GET: APIRoute = async ({ request }) => {
           });
       }
     }
-    typed.isDeloadWeek = isDeload;
+    plan.isDeloadWeek = isDeload;
 
-    return new Response(
-      JSON.stringify({ plan: typed }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    );
+    return aiJson({ plan });
   } catch (err) {
-    console.error('generate-weekly-plan error:', err);
-    return new Response(
-      JSON.stringify({ error: String(err) }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    );
+    return catchAiRouteError(err, 'generate-weekly-plan');
   }
 };
