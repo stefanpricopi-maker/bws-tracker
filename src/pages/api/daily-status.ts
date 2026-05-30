@@ -8,8 +8,8 @@ import { eq, and } from 'drizzle-orm';
 const SPLIT_META = [
   { label: 'Day 1 — Push',      dayType: 'Push',      isRest: false },
   { label: 'Day 2 — Pull',      dayType: 'Pull',      isRest: false },
-  { label: 'Day 3 — Legs',      dayType: 'Legs',      isRest: false },
-  { label: 'Day 4 — Rest',      dayType: 'Rest',      isRest: true  },
+  { label: 'Day 3 — Rest',      dayType: 'Rest',      isRest: true  },
+  { label: 'Day 4 — Legs',      dayType: 'Legs',      isRest: false },
   { label: 'Day 5 — Upper',     dayType: 'Upper',     isRest: false },
   { label: 'Day 6 — Legs+Arms', dayType: 'Legs+Arms', isRest: false },
   { label: 'Day 7 — Rest',      dayType: 'Rest',      isRest: true  },

@@ -6,6 +6,7 @@ import { isBandedExercise, formatExerciseLoad, formatBandLevel } from '../lib/ex
 import type { PlannedExercise } from './WorkoutPlayer';
 import { useStartWorkoutPlayerOptional } from '../context/WorkoutPlayerContext';
 import ExerciseManager from './ExerciseManager';
+import { readApiJson } from '../lib/apiResponse';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -84,7 +85,14 @@ const SPLIT: DayConfig[] = [
     isRest: false,
   },
   {
-    label: 'Day 3 — Legs',
+    label: 'Day 3 — Rest',
+    dayType: 'Rest',
+    exercises: [],
+    medExercise: '',
+    isRest: true,
+  },
+  {
+    label: 'Day 4 — Legs',
     dayType: 'Legs',
     exercises: [
       'Bulgarian Split Squats',
@@ -96,13 +104,6 @@ const SPLIT: DayConfig[] = [
     ],
     medExercise: 'Bulgarian Split Squats',
     isRest: false,
-  },
-  {
-    label: 'Day 4 — Rest',
-    dayType: 'Rest',
-    exercises: [],
-    medExercise: '',
-    isRest: true,
   },
   {
     label: 'Day 5 — Upper',
@@ -264,6 +265,8 @@ export default function WorkoutLogger({ onStartPlayer: onStartPlayerProp }: Work
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [fitSessions, setFitSessions] = useState<FitSession[] | null>(null);
+  const [importedSessionIds, setImportedSessionIds] = useState<Set<string>>(new Set());
+  const [importingSessionId, setImportingSessionId] = useState<string | null>(null);
   const [syncingSessions, setSyncingSessions] = useState(false);
   const [showSessions, setShowSessions] = useState(false);
   const [meso, setMeso] = useState<MesocycleStatus | null>(null);
@@ -559,26 +562,69 @@ export default function WorkoutLogger({ onStartPlayer: onStartPlayerProp }: Work
     setSyncingSessions(true);
     setShowSessions(true);
     try {
-      // Fetch last 14 days of sessions
       const end = new Date().toISOString().slice(0, 10);
-      const start = new Date(Date.now() - 13 * 86_400_000).toISOString().slice(0, 10);
-      const res = await fetch(`/api/google-fit-sessions?startDate=${start}&endDate=${end}`);
-      let data: { error?: string; message?: string } & unknown[] | Record<string, unknown> = [];
-      try { data = await res.json(); } catch { throw new Error('Invalid server response'); }
-      if (!res.ok) {
-        const d = data as { error?: string; message?: string };
-        if (d.error === 'not_connected' || d.error === 'token_expired') {
+      const start = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
+
+      const [sessionsRes, workoutsRes] = await Promise.all([
+        fetch(`/api/google-fit-sessions?startDate=${start}&endDate=${end}`),
+        fetch('/api/workouts?days=7'),
+      ]);
+
+      const data = await readApiJson<{ error?: string; message?: string } & FitSession[]>(sessionsRes);
+      if (!sessionsRes.ok) {
+        if (data.error === 'not_connected' || data.error === 'token_expired') {
           window.location.href = '/api/auth/google/login';
           return;
         }
-        throw new Error(d.message ?? 'Fetch failed');
+        throw new Error(data.message ?? 'Fetch failed');
       }
-      setFitSessions(data as unknown[]);
+
+      const workoutsData = workoutsRes.ok
+        ? await readApiJson<Array<{ googleFitSessionId?: string | null }>>(workoutsRes)
+        : [];
+      const imported = new Set<string>();
+      for (const row of workoutsData) {
+        if (row.googleFitSessionId) imported.add(row.googleFitSessionId);
+      }
+
+      setFitSessions(data as unknown as FitSession[]);
+      setImportedSessionIds(imported);
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not fetch Google Fit sessions.');
       setShowSessions(false);
     } finally {
       setSyncingSessions(false);
+    }
+  }
+
+  async function handleImportSession(session: FitSession) {
+    setImportingSessionId(session.id);
+    try {
+      const date = new Date(session.startTimeMs).toISOString().slice(0, 10);
+      const res = await fetch('/api/workouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date,
+          dayType: `Cardio · ${session.activityLabel}`,
+          activityLabel: session.activityLabel,
+          googleFitSessionId: session.id,
+          sets: [],
+        }),
+      });
+      const data = await readApiJson<{ error?: string; message?: string }>(res);
+      if (res.status === 409 || data.error === 'already_imported') {
+        setImportedSessionIds((prev) => new Set(prev).add(session.id));
+        showToast('Antrenament deja adăugat.');
+        return;
+      }
+      if (!res.ok) throw new Error(data.message ?? 'Import failed');
+      setImportedSessionIds((prev) => new Set(prev).add(session.id));
+      showToast(`${session.activityLabel} adăugat la workouts ✓`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Nu am putut adăuga antrenamentul.');
+    } finally {
+      setImportingSessionId(null);
     }
   }
 
@@ -798,7 +844,7 @@ export default function WorkoutLogger({ onStartPlayer: onStartPlayerProp }: Work
                 className="min-h-[44px] w-full bg-violet-600 hover:bg-violet-500 active:bg-violet-700
                            disabled:opacity-60 text-white font-semibold text-sm rounded-xl transition-colors"
               >
-                {generatingPlan ? '⏳ Generating...' : '✨ Generate 5-Day Split'}
+                {generatingPlan ? '⏳ Generating...' : '✨ Generate 7-Day Split'}
               </button>
             )}
             {planError && (
@@ -810,7 +856,7 @@ export default function WorkoutLogger({ onStartPlayer: onStartPlayerProp }: Work
               <>
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-                    {aiPlan.split_type ?? '5-day'} split
+                    {aiPlan.split_type ?? '7-day'} split
                   </p>
                   <button
                     type="button"
@@ -826,7 +872,9 @@ export default function WorkoutLogger({ onStartPlayer: onStartPlayerProp }: Work
                     Push: 'border-orange-500/40 bg-orange-500/5',
                     Pull: 'border-blue-500/40 bg-blue-500/5',
                     Legs: 'border-green-500/40 bg-green-500/5',
+                    Abs:  'border-amber-500/40 bg-amber-500/5',
                     Upper:'border-violet-500/40 bg-violet-500/5',
+                    'Legs+Arms': 'border-teal-500/40 bg-teal-500/5',
                     Rest: 'border-gray-700 bg-gray-800/30',
                   };
                   return (
@@ -921,19 +969,21 @@ export default function WorkoutLogger({ onStartPlayer: onStartPlayerProp }: Work
       {showSessions && (
         <div className="bg-gray-800/60 border border-gray-700/60 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/60">
-            <span className="text-sm font-semibold text-white">Recent Sessions (14 days)</span>
+            <span className="text-sm font-semibold text-white">Ultima săptămână</span>
             <button onClick={() => setShowSessions(false)} className="text-gray-400 hover:text-white text-lg leading-none">×</button>
           </div>
           {syncingSessions ? (
             <div className="py-8 text-center text-gray-400 text-sm">Loading sessions…</div>
           ) : fitSessions && fitSessions.length === 0 ? (
-            <div className="py-8 text-center text-gray-400 text-sm">No sessions found in Google Fit for the last 14 days.</div>
+            <div className="py-8 text-center text-gray-400 text-sm">Niciun antrenament Google Fit în ultima săptămână.</div>
           ) : fitSessions ? (
             <div className="divide-y divide-gray-700/40">
               {fitSessions.map((s) => {
                 const date = new Date(s.startTimeMs);
                 const dateStr = date.toLocaleDateString('ro-RO', { weekday: 'short', month: 'short', day: 'numeric' });
                 const timeStr = date.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+                const imported = importedSessionIds.has(s.id);
+                const importing = importingSessionId === s.id;
                 return (
                   <div key={s.id} className="flex items-center gap-3 px-4 py-3">
                     <div className="w-9 h-9 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center flex-shrink-0 text-base">
@@ -947,12 +997,24 @@ export default function WorkoutLogger({ onStartPlayer: onStartPlayerProp }: Work
                       <p className="text-sm font-semibold text-white truncate">{s.name}</p>
                       <p className="text-xs text-gray-400">{dateStr} · {timeStr}</p>
                     </div>
-                    <div className="text-right flex-shrink-0">
+                    <div className="text-right flex-shrink-0 mr-1">
                       <p className="text-sm font-bold text-white">{s.durationMin} min</p>
                       {s.calories !== null && (
                         <p className="text-xs text-orange-400">{s.calories} kcal</p>
                       )}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleImportSession(s)}
+                      disabled={imported || importing}
+                      className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors
+                        ${imported
+                          ? 'bg-emerald-900/30 border-emerald-600/40 text-emerald-300 cursor-default'
+                          : 'bg-violet-600/20 border-violet-500/40 text-violet-200 hover:bg-violet-600/30 disabled:opacity-50'
+                        }`}
+                    >
+                      {imported ? '✓ Adăugat' : importing ? '…' : '+ Adaugă'}
+                    </button>
                   </div>
                 );
               })}

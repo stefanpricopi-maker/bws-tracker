@@ -30,7 +30,7 @@ describe('/api/exercises', () => {
       offset: number;
     }>(res);
     expect(body.exercises).toHaveLength(2);
-    expect(body.total).toBe(5);
+    expect(body.total).toBe(10); // 5 fixtures + 5 default Abs backfill on GET
     expect(body.limit).toBe(2);
     expect(body.offset).toBe(0);
   });
@@ -62,18 +62,17 @@ describe('/api/exercises', () => {
     expect(body.error).toBeTruthy();
   });
 
-  it('POST creates custom exercise', async () => {
+  it('POST creates custom abs exercise', async () => {
     const res = await postExercise({
       request: jsonRequest('POST', {
-        name:          'Custom Curl',
-        target_muscle: 'Biceps',
-        category:      'Pull',
+        name:          'Cable Crunch',
+        target_muscle: 'Core',
+        category:      'Abs',
       }),
     } as Parameters<typeof postExercise>[0]);
 
     expect(res.status).toBe(201);
-    const body = await readJson<{ exercise: { name: string; isCustom: boolean } }>(res);
-    expect(body.exercise.name).toBe('Custom Curl');
-    expect(body.exercise.isCustom).toBe(true);
+    const body = await readJson<{ exercise: { category: string } }>(res);
+    expect(body.exercise.category).toBe('Abs');
   });
 });

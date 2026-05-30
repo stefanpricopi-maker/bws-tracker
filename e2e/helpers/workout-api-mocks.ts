@@ -39,14 +39,20 @@ export async function mockWorkoutPlayerApis(page: Page) {
       contentType: 'application/json',
       body: JSON.stringify({
         plan: {
-          split_type: '5-day',
+          split_type: '7-day',
           isDeloadWeek: false,
           days: [
             {
-              day_name:  'Push',
+              day_name:  'Monday',
               category:  'Push',
               exercises: [{ name: PUSH_EXERCISE, sets: 2 }],
             },
+            { day_name: 'Tuesday',   category: 'Pull',      exercises: [] },
+            { day_name: 'Wednesday', category: 'Rest',      exercises: [] },
+            { day_name: 'Thursday',  category: 'Legs',      exercises: [] },
+            { day_name: 'Friday',    category: 'Upper',     exercises: [] },
+            { day_name: 'Saturday',  category: 'Legs+Arms', exercises: [] },
+            { day_name: 'Sunday',    category: 'Rest',      exercises: [] },
           ],
         },
       }),

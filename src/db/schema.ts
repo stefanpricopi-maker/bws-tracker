@@ -116,7 +116,7 @@ export const exercises = sqliteTable('exercises', {
   id:           integer('id').primaryKey({ autoIncrement: true }),
   name:         text('name').notNull().unique(),
   targetMuscle: text('target_muscle').notNull(),
-  category:     text('category').notNull(), // 'Push' | 'Pull' | 'Legs' | 'Upper' | 'Full Body'
+  category:     text('category').notNull(), // 'Push' | 'Pull' | 'Legs' | 'Abs' | 'Upper' | 'Full Body'
   imageUrl:     text('image_url'),           // GIF or image link for form-guide display
   isCustom:     integer('is_custom',   { mode: 'boolean' }).notNull().default(false),
   isArchived:   integer('is_archived', { mode: 'boolean' }).notNull().default(false),

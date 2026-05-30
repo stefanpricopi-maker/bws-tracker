@@ -8,13 +8,14 @@ interface Exercise {
   isCustom: boolean;
 }
 
-const CATEGORIES = ['Push', 'Pull', 'Legs', 'Upper', 'Full Body'] as const;
+const CATEGORIES = ['Push', 'Pull', 'Legs', 'Abs', 'Upper', 'Full Body'] as const;
 const PAGE_SIZE = 15;
 
 const CATEGORY_COLORS: Record<string, string> = {
   Push:       'bg-orange-500/15 text-orange-300 border-orange-500/30',
   Pull:       'bg-blue-500/15   text-blue-300   border-blue-500/30',
   Legs:       'bg-green-500/15  text-green-300  border-green-500/30',
+  Abs:        'bg-amber-500/15  text-amber-300  border-amber-500/30',
   Upper:      'bg-violet-500/15 text-violet-300 border-violet-500/30',
   'Full Body':'bg-pink-500/15   text-pink-300   border-pink-500/30',
 };

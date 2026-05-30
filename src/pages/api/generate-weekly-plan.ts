@@ -13,17 +13,21 @@ import {
 import { db } from '../../db';
 import { exercises, mesocycles } from '../../db/schema';
 import { eq } from 'drizzle-orm';
-import { isDeloadWeek, deloadSetCount, weeksElapsed } from '../../lib/periodization';
+import { isDeloadWeek, weeksElapsed } from '../../lib/periodization';
+import { normalizeWeeklyPlan, WEEKLY_SCHEDULE } from '../../lib/weeklyPlan';
 
 function systemPrompt(isDeload: boolean): string {
   const volumeNote = isDeload
     ? `\nIMPORTANT: This is MESOCYCLE DELOAD WEEK. Reduce every exercise to ~60% of normal sets (e.g. 3→2, 4→2). Keep the same exercises.`
     : '';
+  const scheduleLines = WEEKLY_SCHEDULE.map(
+    (d) => `- ${d.day_name}: ${d.isRest ? 'Rest (empty exercises)' : d.category}`,
+  ).join('\n');
   return `You are a strict Built With Science fitness coach.
 Your job is to create a personalised weekly workout split for a home-gym athlete (dumbbells and resistance bands only).
 You will be given the user's full exercise library as a JSON array.
 You MUST only use exercise names that appear EXACTLY in the provided list — do not invent, rename, or paraphrase any exercise.
-Apply proper volume balance: Push days hit chest/shoulders/triceps, Pull days hit back/biceps/rear-delts, Leg days hit quads/hamstrings/calves.
+Apply proper volume balance: Push days hit chest/shoulders/triceps, Pull days hit back/biceps/rear-delts, Leg days hit quads/hamstrings/calves, Upper days blend push/pull upper body, Legs+Arms days hit legs plus biceps/triceps/rear delts.
 
 Volume rules (apply per exercise):
 - Primary compound (first exercise per day): 4 sets
@@ -34,18 +38,20 @@ Volume rules (apply per exercise):
 
 Return ONLY a valid JSON object with NO markdown, NO backticks, NO explanation. The schema:
 {
-  "split_type": "3-day" | "5-day",
+  "split_type": "7-day",
   "days": [
     {
-      "day_name": "string",
-      "category": "Push" | "Pull" | "Legs" | "Upper" | "Rest",
+      "day_name": "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday",
+      "category": "Push" | "Pull" | "Legs" | "Upper" | "Legs+Arms" | "Rest",
       "exercises": [
         { "name": "string", "sets": number }
       ]
     }
   ]
 }
-Each training day must have 5-7 exercises. Rest days must have an empty "exercises" array.`;
+You MUST return exactly 7 days in calendar order (Monday through Sunday) using this fixed schedule:
+${scheduleLines}
+Each training day must have 5-7 exercises. Rest days (Wednesday, Sunday) must have category "Rest" and an empty "exercises" array.`;
 }
 
 function buildUserPrompt(
@@ -56,7 +62,9 @@ function buildUserPrompt(
   return `Here is the user's full exercise library:
 ${JSON.stringify(exerciseList, null, 2)}
 
-Create a balanced 5-day workout split (Push / Pull / Legs / Upper / Rest) using ONLY the exercises in this list.
+Create a balanced 7-day calendar split using ONLY the exercises in this list.
+Train on Monday (Push), Tuesday (Pull), Thursday (Legs), Friday (Upper), and Saturday (Legs+Arms).
+Wednesday and Sunday are mandatory rest days with no exercises.
 Pick exercises that cover all muscle groups without overlap. Prioritise compound movements first per day.${deload}`;
 }
 
@@ -101,41 +109,18 @@ export const GET: APIRoute = async ({ request }) => {
         { role: 'system', content: systemPrompt(isDeload) },
         { role: 'user',   content: buildUserPrompt(rows, isDeload) },
       ],
-      max_tokens: 1200,
+      max_tokens: 2000,
       temperature: 0.3,
       ...jsonObjectFormat(baseUrl),
     });
 
-    const plan = parseLlmJson<{
-      split_type?: string;
-      days?: Array<{ day_name: string; category: string; exercises: Array<{ name: string; sets: number }> }>;
-      isDeloadWeek?: boolean;
-    }>(raw, 'Weekly plan was not valid JSON.');
+    const planRaw = parseLlmJson<{ days?: Array<{ day_name: string; category: string; exercises: Array<{ name: string; sets: number }> }> }>(
+      raw,
+      'Weekly plan was not valid JSON.',
+    );
 
     const validNames = new Set(rows.map((r) => r.name));
-    if (plan?.days) {
-      for (const day of plan.days) {
-        if (!Array.isArray(day.exercises)) {
-          day.exercises = [];
-          continue;
-        }
-        day.exercises = day.exercises
-          .filter((ex) => {
-            if (typeof ex !== 'object' || ex === null) return false;
-            if (!validNames.has(ex.name)) {
-              console.warn(`[generate-weekly-plan] Hallucinated exercise removed: "${ex.name}"`);
-              return false;
-            }
-            return true;
-          })
-          .map((ex) => {
-            let sets = Math.min(5, Math.max(2, Math.round(Number(ex.sets) || 3)));
-            if (isDeload) sets = deloadSetCount(sets);
-            return { name: ex.name, sets };
-          });
-      }
-    }
-    plan.isDeloadWeek = isDeload;
+    const plan = normalizeWeeklyPlan(planRaw, validNames, isDeload);
 
     return aiJson({ plan });
   } catch (err) {
