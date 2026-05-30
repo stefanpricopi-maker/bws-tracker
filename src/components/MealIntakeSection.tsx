@@ -47,8 +47,7 @@ export default function MealIntakeSection({
     onChange(next);
   }
 
-  async function handleEstimate(e: React.SyntheticEvent) {
-    e.preventDefault();
+  async function handleEstimate() {
     const text = description.trim();
     if (text.length < 3) {
       setEstimateError('Scrie ce ai mâncat (min. 3 caractere).');
@@ -104,7 +103,7 @@ export default function MealIntakeSection({
       </summary>
 
       <div className="px-3 pb-3 pt-0 flex flex-col gap-2 border-t border-gray-700/50">
-        <form onSubmit={handleEstimate} className="flex flex-col gap-1.5 pt-2">
+        <div className="flex flex-col gap-1.5 pt-2">
           <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
             Ce ai mâncat
           </label>
@@ -123,7 +122,8 @@ export default function MealIntakeSection({
             data-testid={`meal-${slot}-description`}
           />
           <button
-            type="submit"
+            type="button"
+            onClick={handleEstimate}
             disabled={estimating || description.trim().length < 3}
             className="self-start px-3 py-1.5 rounded-lg text-[11px] font-semibold
                        bg-violet-600/25 border border-violet-500/40 text-violet-200
@@ -138,7 +138,7 @@ export default function MealIntakeSection({
           {estimateError && (
             <p className="text-[10px] text-red-400">{estimateError}</p>
           )}
-        </form>
+        </div>
 
         <div className="grid grid-cols-2 gap-2">
           {([

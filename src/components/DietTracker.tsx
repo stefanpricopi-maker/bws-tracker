@@ -728,7 +728,7 @@ export default function DietTracker() {
       })()}
 
       {/* Input form */}
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3" action="#" noValidate>
         {/* Section header + scan button */}
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
