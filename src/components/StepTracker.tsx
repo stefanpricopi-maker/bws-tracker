@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { formatActivitySyncBanner } from '../lib/fitness';
 import { cacheActivitySync } from '../lib/activitySync';
+import { readApiJson } from '../lib/apiResponse';
 
 const STEP_TARGET = 10_000;
 const DEFAULT_CAL_TARGET = 1850;
@@ -30,16 +31,19 @@ function SyncButton({ onSync }: SyncButtonProps) {
     setSynced(false);
     try {
       const res = await fetch(`/api/sync/google-fit?date=${today()}`);
-      let data: { steps?: number; activeCalories?: number; error?: string; message?: string } = {};
-      try {
-        data = await res.json();
-      } catch {
-        throw new Error('Server returned an invalid response. Try again.');
-      }
+      const data = await readApiJson<{
+        steps?: number;
+        activeCalories?: number;
+        error?: string;
+        message?: string;
+      }>(res);
       if (!res.ok) {
         if (data.error === 'not_connected' || data.error === 'token_expired') {
           window.location.href = '/api/auth/google/login';
           return;
+        }
+        if (data.error === 'unauthorized') {
+          throw new Error('Autentificare necesară. Loghează-te din Profil.');
         }
         throw new Error(data.message ?? 'Sync failed');
       }

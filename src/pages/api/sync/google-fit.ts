@@ -13,12 +13,18 @@ export const GET: APIRoute = async ({ request, url }) => {
     const refreshed = await withRefreshedGoogleClient(userId);
     if (!refreshed.stored) {
       return new Response(
-        JSON.stringify({ error: 'not_connected', message: 'Google Fit not connected. Connect in Profile.' }),
+        JSON.stringify({ error: 'not_connected', message: 'Google Fit not connected. Connect in Profile → App.' }),
         { status: 401, headers: { 'Content-Type': 'application/json' } },
       );
     }
 
     const accessToken = refreshed.accessToken ?? refreshed.stored.accessToken;
+    if (!accessToken) {
+      return new Response(
+        JSON.stringify({ error: 'token_expired', message: 'Google Fit session expired. Reconnect in Profile → App.' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
     const metrics = await fetchDailyMetrics(
       accessToken,
       refreshed.stored.refreshToken,

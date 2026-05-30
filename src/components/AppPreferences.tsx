@@ -110,11 +110,29 @@ export default function AppPreferences() {
       </div>
 
       {googleFit && (
-        <p className={`text-xs ${googleFit.connected ? 'text-emerald-400' : 'text-amber-400'}`}>
-          Google Fit: {googleFit.connected
-            ? googleFit.hasRefreshToken ? 'Connected (auto-refresh)' : 'Connected — reconnect if sync fails'
-            : 'Not connected — use Connect Google Fit below'}
-        </p>
+        <div className="flex flex-col gap-2">
+          <p className={`text-xs ${googleFit.connected ? 'text-emerald-400' : 'text-amber-400'}`}>
+            Google Fit: {googleFit.connected
+              ? googleFit.hasRefreshToken ? 'Connected (auto-refresh)' : 'Connected — reconnect if sync fails'
+              : 'Not connected'}
+          </p>
+          {!googleFit.connected && (
+            <a
+              href="/api/auth/google/login"
+              className="text-center py-2.5 rounded-xl bg-emerald-700/40 hover:bg-emerald-700/55 border border-emerald-500/40 text-sm font-semibold text-emerald-200 transition-colors"
+            >
+              Connect Google Fit
+            </a>
+          )}
+          {googleFit.connected && !googleFit.hasRefreshToken && (
+            <a
+              href="/api/auth/google/login"
+              className="text-center py-2 rounded-xl bg-amber-900/30 hover:bg-amber-900/45 border border-amber-500/30 text-xs font-semibold text-amber-200 transition-colors"
+            >
+              Reconnect Google Fit
+            </a>
+          )}
+        </div>
       )}
 
       <a
