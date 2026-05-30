@@ -10,9 +10,10 @@ import {
   parseMealPreferencesJson,
   resolveMealPreferences,
 } from '../../lib/mealPreferences';
-import { generateMealPlanFromCatalog } from '../../lib/macroSolverLocal';
+import { generateMealPlanFromCatalog, regenerateMealSlot } from '../../lib/macroSolverLocal';
+import { MEAL_SLOTS, type MealSlot } from '../../lib/mealIntake';
 
-export const GET: APIRoute = async ({ request }) => {
+export const GET: APIRoute = async ({ request, url }) => {
   const auth = await requireUser(request, 'macro-solver', 10);
   if (auth instanceof Response) return auth;
   const { userId } = auth;
@@ -42,6 +43,14 @@ export const GET: APIRoute = async ({ request }) => {
     }
 
     const catalogIds = prefs.allowedIds.filter((id) => !id.startsWith('custom_'));
+    const slotParam = url.searchParams.get('slot');
+    const exclude = url.searchParams.get('exclude')?.split(',').filter(Boolean) ?? [];
+
+    if (slotParam && (MEAL_SLOTS as readonly string[]).includes(slotParam)) {
+      const meal = regenerateMealSlot(slotParam as MealSlot, targets, catalogIds, exclude);
+      return aiJson({ meal, targets });
+    }
+
     const plan = generateMealPlanFromCatalog(targets, catalogIds);
     return aiJson({ plan, targets });
   } catch (err) {

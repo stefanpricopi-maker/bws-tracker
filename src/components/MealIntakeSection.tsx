@@ -16,6 +16,7 @@ interface MealIntakeSectionProps {
   defaultExpanded?: boolean;
   pickerItems?: import('../lib/mealPlanPicker').MealPickerItem[];
   pickerKey?: number;
+  slotCalorieTarget?: number;
 }
 
 export default function MealIntakeSection({
@@ -27,6 +28,7 @@ export default function MealIntakeSection({
   defaultExpanded = true,
   pickerItems = [],
   pickerKey = 0,
+  slotCalorieTarget,
 }: MealIntakeSectionProps) {
   const [manualEdit, setManualEdit] = useState(false);
 
@@ -67,8 +69,10 @@ export default function MealIntakeSection({
         </span>
         <span className="text-[11px] tabular-nums text-gray-400">
           {sub.calories > 0 || sub.protein > 0
-            ? `${sub.calories} kcal · ${sub.protein}g P`
-            : '—'}
+            ? `${sub.calories} kcal · ${sub.protein}g P${slotCalorieTarget ? ` / ~${slotCalorieTarget}` : ''}`
+            : slotCalorieTarget
+              ? `~${slotCalorieTarget} kcal țintă`
+              : '—'}
         </span>
       </summary>
 
@@ -87,10 +91,10 @@ export default function MealIntakeSection({
 
         <div className="grid grid-cols-2 gap-2">
           {([
-            ['protein',  'Protein',  'g',    '💪', false],
+            ['protein',  'Proteine', 'g',    '💪', false],
             ['carbs',    'Carbs',    'g',    '🍚', false],
-            ['fat',      'Fat',      'g',    '🥑', false],
-            ['calories', 'Calories', 'kcal', '🔥', true],
+            ['fat',      'Grăsimi',  'g',    '🥑', false],
+            ['calories', 'Calorii',  'kcal', '🔥', true],
           ] as const).map(([key, fieldLabel, unit, fieldIcon, isCalories]) => (
             <div key={key} className="flex flex-col gap-1">
               <label className="flex items-center gap-1 text-[11px] font-semibold text-gray-400 px-0.5">

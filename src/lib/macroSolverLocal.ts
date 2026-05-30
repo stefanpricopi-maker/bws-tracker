@@ -7,6 +7,7 @@ import type { FoodAmountUnit } from './foodNutrition';
 import {
   missingFoodLabelsForSlot,
   resolveRecipe,
+  selectAlternateRecipeForSlot,
   selectBestMealPlanRecipes,
   type MealRecipeDef,
 } from './mealRecipes';
@@ -25,6 +26,7 @@ export interface MealPlanIngredient {
 
 export interface MealPlanMeal {
   meal_name:      string;
+  recipe_id:      string;
   recipe_name:    string;
   ingredients:    MealPlanIngredient[];
   total_calories: number;
@@ -43,10 +45,31 @@ function buildMealFromRecipe(slot: MealSlot, recipe: MealRecipeDef): MealPlanMea
   const { ingredients, totals } = resolveRecipe(recipe);
   return {
     meal_name:      MEAL_LABELS[slot],
+    recipe_id:      recipe.id,
     recipe_name:    recipe.name,
     ingredients,
     total_calories: totals.calories,
   };
+}
+
+export function regenerateMealSlot(
+  slot: MealSlot,
+  targets: MealMacros,
+  allowedIds: string[],
+  excludeRecipeIds: string[],
+): MealPlanMeal {
+  const recipe = selectAlternateRecipeForSlot(
+    slot,
+    targets,
+    allowedIds,
+    new Set(excludeRecipeIds),
+  );
+  if (!recipe) {
+    const hints = missingFoodLabelsForSlot(slot, allowedIds);
+    const hint = hints.length > 0 ? ` Adaugă: ${hints.join(', ')}.` : '';
+    throw new Error(`Nicio altă rețetă pentru ${MEAL_LABELS[slot]}.${hint}`);
+  }
+  return buildMealFromRecipe(slot, recipe);
 }
 
 export function generateMealPlanFromCatalog(

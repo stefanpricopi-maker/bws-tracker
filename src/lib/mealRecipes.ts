@@ -756,6 +756,23 @@ export function resolveRecipe(recipe: MealRecipeDef): {
   };
 }
 
+export function selectAlternateRecipeForSlot(
+  slot: MealSlot,
+  targets: MealMacros,
+  allowedIds: string[],
+  excludeRecipeIds: Set<string>,
+): MealRecipeDef | null {
+  const allowed = new Set(allowedIds);
+  const slotTarget = slotTargets(targets, slot);
+
+  const candidates = MEAL_RECIPES
+    .filter((r) => r.slot === slot && recipeIsAllowed(r, allowed) && !excludeRecipeIds.has(r.id))
+    .map((r) => ({ recipe: r, ...resolveRecipe(r) }))
+    .sort((a, b) => macroDistance(a.totals, slotTarget) - macroDistance(b.totals, slotTarget));
+
+  return candidates[0]?.recipe ?? null;
+}
+
 export function selectRecipeForSlot(
   slot: MealSlot,
   targets: MealMacros,

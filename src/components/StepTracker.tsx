@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { formatActivitySyncBanner } from '../lib/fitness';
+import { cacheActivitySync } from '../lib/activitySync';
 
 const STEP_TARGET = 10_000;
 const DEFAULT_CAL_TARGET = 1850;
@@ -125,6 +126,7 @@ export default function StepTracker() {
     setSteps(syncedSteps);
     setInput(syncedSteps.toString());
     setActivityBanner(formatActivitySyncBanner(activeCalories, syncedSteps, calTarget));
+    cacheActivitySync({ date: today(), activeCalories, steps: syncedSteps });
   }
 
   const progress   = clamp(Math.round((steps / STEP_TARGET) * 100));

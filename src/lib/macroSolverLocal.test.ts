@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateMealPlanFromCatalog } from './macroSolverLocal';
+import { generateMealPlanFromCatalog, regenerateMealSlot } from './macroSolverLocal';
 
 const ALLOWED = [
   'oats', 'milk_whole', 'eggs', 'chicken_breast', 'rice_white', 'broccoli',
@@ -34,5 +34,19 @@ describe('macroSolverLocal', () => {
     );
     const snacks = plan.meals.find((m) => m.meal_name === 'Gustări')!;
     expect(snacks.recipe_name.toLowerCase()).toMatch(/măr|banană|iaurt|bară|humus/);
+  });
+
+  it('regenerates a single meal slot with a different recipe', () => {
+    const targets = { calories: 1850, protein: 180, carbs: 113, fat: 75 };
+    const allowed = [
+      ...ALLOWED,
+      'tuna', 'quinoa', 'potato', 'salad_mix', 'whey',
+    ];
+    const plan = generateMealPlanFromCatalog(targets, allowed);
+    const breakfast = plan.meals.find((m) => m.meal_name === 'Mic dejun')!;
+    const exclude = plan.meals.map((m) => m.recipe_id);
+    const alt = regenerateMealSlot('breakfast', targets, allowed, exclude);
+    expect(alt.recipe_id).not.toBe(breakfast.recipe_id);
+    expect(alt.ingredients.length).toBeGreaterThan(0);
   });
 });

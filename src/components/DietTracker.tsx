@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { resolveDietTargets } from '../lib/macroTargets';
+import { calcEatBack } from '../lib/fitness';
+import { readCachedActivitySync, cacheActivitySync } from '../lib/activitySync';
 import MealIntakeSection from './MealIntakeSection';
 import {
   canGenerateMealPlan,
@@ -22,6 +24,7 @@ import {
   type MealSlot,
 } from '../lib/mealIntake';
 import { pickerItemsFromPlanIngredients, type MealPickerItem } from '../lib/mealPlanPicker';
+import { MEAL_CAL_SHARE } from '../lib/mealRecipes';
 
 // ── Macro-Solver types ──────────────────────────────────────────────────────
 interface MealIngredient {
@@ -37,6 +40,7 @@ interface MealIngredient {
 }
 interface Meal {
   meal_name:      string;
+  recipe_id?:     string;
   recipe_name?:   string;
   ingredients:    MealIngredient[];
   total_calories: number;
@@ -107,11 +111,11 @@ function MacroBar({ label, consumed, target, unit, color }: MacroBarProps) {
             {formatMacroGrams(consumed)}
           </span>
           <span className="text-gray-600"> / {formatMacroGrams(target)}{unit}</span>
-          {!over && (
-            <span className="text-gray-600"> · {formatMacroGrams(remaining)}{unit} left</span>
+          {!over && remaining > 0 && (
+            <span className="text-gray-600"> · {formatMacroGrams(remaining)}{unit} rămas</span>
           )}
           {over && (
-            <span className="text-red-400 font-semibold"> +{formatMacroGrams(overBy)}{unit} over</span>
+            <span className="text-red-400 font-semibold"> +{formatMacroGrams(overBy)}{unit} peste</span>
           )}
         </span>
       </div>
@@ -141,6 +145,18 @@ const EMPTY_PICKER_ITEMS = Object.fromEntries(
   MEAL_SLOTS.map((s) => [s, [] as MealPickerItem[]]),
 ) as Record<MealSlot, MealPickerItem[]>;
 
+function planDailyTotals(meals: Meal[]): MealPlan['daily_totals'] {
+  return meals.reduce(
+    (acc, meal) => ({
+      calories: acc.calories + meal.total_calories,
+      protein:  acc.protein  + meal.ingredients.reduce((s, i) => s + i.protein, 0),
+      carbs:    acc.carbs    + meal.ingredients.reduce((s, i) => s + i.carbs, 0),
+      fat:      acc.fat      + meal.ingredients.reduce((s, i) => s + i.fat, 0),
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 },
+  );
+}
+
 interface DietTrackerProps {
   onOpenProfile?: () => void;
 }
@@ -155,11 +171,15 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
   const [scanStatus, setScanStatus] = useState<'idle' | 'ok' | 'err'>('idle');
   const [preview, setPreview]     = useState<string | null>(null);
   const [targets, setTargets]         = useState(DEFAULT_TARGETS);
+  const [calorieTarget, setCalorieTarget] = useState(DEFAULT_TARGETS.calories);
+  const [eatBackKcal, setEatBackKcal] = useState(0);
   const [targetsHint, setTargetsHint] = useState('');
   // Macro-Solver state
   const [solving, setSolving]       = useState(false);
   const [mealPlan, setMealPlan]     = useState<MealPlan | null>(null);
   const [solveError, setSolveError] = useState<string | null>(null);
+  const [regeneratingSlot, setRegeneratingSlot] = useState<MealSlot | null>(null);
+  const [regenError, setRegenError] = useState<string | null>(null);
   const [logging, setLogging]       = useState(false);
   const [logStatus, setLogStatus]   = useState<'idle' | 'ok' | 'err'>('idle');
   const [mealPreferences, setMealPreferences] = useState<MealPreferences>(defaultMealPreferences);
@@ -196,6 +216,38 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
 
   function markMealsSaved(form: DayMealsForm) {
     lastSavedJsonRef.current = JSON.stringify(form);
+  }
+
+  function applyActivityBonus(activeCalories: number, baseCalories: number) {
+    const { eatBack, adjustedTarget, isHigh } = calcEatBack(activeCalories, baseCalories);
+    setEatBackKcal(isHigh ? eatBack : 0);
+    setCalorieTarget(isHigh ? adjustedTarget : baseCalories);
+  }
+
+  async function handleRegenerateMeal(slot: MealSlot) {
+    if (!mealPlan) return;
+    const exclude = mealPlan.meals
+      .map((m) => m.recipe_id)
+      .filter((id): id is string => !!id);
+    setRegeneratingSlot(slot);
+    setRegenError(null);
+    try {
+      const params = new URLSearchParams({ slot, exclude: exclude.join(',') });
+      const res  = await fetch(`/api/macro-solver?${params}`);
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(typeof data.error === 'string' ? data.error : 'Nu am putut schimba rețeta.');
+      }
+      const newMeal = data.meal as Meal;
+      const nextMeals = mealPlan.meals.map((m) =>
+        mealSlotFromPlanName(m.meal_name) === slot ? newMeal : m,
+      );
+      setMealPlan({ meals: nextMeals, daily_totals: planDailyTotals(nextMeals) });
+    } catch (err) {
+      setRegenError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRegeneratingSlot(null);
+    }
   }
 
   async function handleSolveMacros() {
@@ -290,13 +342,15 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
         const latestWeight = weightLogs.length > 0 ? weightLogs[0].weight_kg! : null;
         const t = resolveDietTargets(profile.goals ?? null, latestWeight);
         setTargets({ calories: t.calories, protein: t.protein, carbs: t.carbs, fat: t.fat });
+        setCalorieTarget(t.calories);
+        setEatBackKcal(0);
         if (profile.goals?.mealPreferences) {
           setMealPreferences(profile.goals.mealPreferences);
         }
         if (latestWeight) {
-          setTargetsHint(`Protein target: ${t.protein}g (${latestWeight} kg × 1.8 g/kg). Edit in Profile.`);
+          setTargetsHint(`Țintă proteine: ${t.protein}g (${latestWeight} kg × 1,8 g/kg). Ajustează în Profil.`);
         } else {
-          setTargetsHint('Log weight in Stats to personalize protein target (1.8 g/kg).');
+          setTargetsHint('Loghează greutatea în Stats pentru țintă personalizată (1,8 g/kg).');
         }
 
         const todayRow = rows.find((r) => r.date === today());
@@ -321,6 +375,35 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
         setIsHydrated(true);
       });
   }, []);
+
+  // Activity eat-back: cache from Home or silent Google Fit fetch
+  useEffect(() => {
+    const date = today();
+    const cached = readCachedActivitySync(date);
+    if (cached) {
+      applyActivityBonus(cached.activeCalories, targets.calories);
+      return;
+    }
+    fetch(`/api/sync/google-fit?date=${date}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { activeCalories?: number; steps?: number } | null) => {
+        if (data?.activeCalories == null) return;
+        cacheActivitySync({
+          date,
+          activeCalories: data.activeCalories,
+          steps:          data.steps ?? 0,
+        });
+        applyActivityBonus(data.activeCalories, targets.calories);
+      })
+      .catch(() => {});
+  }, [targets.calories]);
+
+  const slotCalorieTargets = useMemo(
+    () => Object.fromEntries(
+      MEAL_SLOTS.map((s) => [s, Math.round(calorieTarget * MEAL_CAL_SHARE[s])]),
+    ) as Record<MealSlot, number>,
+    [calorieTarget],
+  );
 
   // Auto-save after meal edits (debounced)
   useEffect(() => {
@@ -403,20 +486,213 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
     }
   }
 
-  const calPct = pct(logged.calories, targets.calories);
+  const calPct = pct(logged.calories, calorieTarget);
+  const hasLogged = logged.calories > 0 || logged.protein > 0 || logged.carbs > 0 || logged.fat > 0;
 
   return (
     <div className="flex flex-col gap-6">
 
       {/* Header */}
       <div>
-        <h2 className="text-lg font-bold text-white">Nutrition</h2>
-        <p className="text-xs text-gray-500 mt-0.5">Daily targets & intake</p>
+        <h2 className="text-lg font-bold text-white">Nutriție</h2>
+        <p className="text-xs text-gray-500 mt-0.5">Ținte zilnice & consum</p>
         {targetsHint && (
           <p className="text-[10px] text-violet-400/80 mt-1 max-w-[280px] leading-snug">{targetsHint}</p>
         )}
       </div>
 
+      {/* ── Progres zilnic ─────────────────────────────────────────── */}
+      <div
+        className="rounded-2xl p-5 flex items-center gap-5"
+        style={{ backgroundColor: '#1a1d27', border: '1px solid #2a2f45' }}
+      >
+        <div className="relative flex-shrink-0" style={{ width: 80, height: 80 }}>
+          <svg width="80" height="80" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="32" fill="none" stroke="#2a2f45" strokeWidth="8" />
+            <circle
+              cx="40" cy="40" r="32" fill="none"
+              stroke={calPct > 100 ? '#ef4444' : '#7c3aed'}
+              strokeWidth="8"
+              strokeLinecap="round"
+              strokeDasharray={`${2 * Math.PI * 32}`}
+              strokeDashoffset={`${2 * Math.PI * 32 * (1 - clamp(calPct) / 100)}`}
+              transform="rotate(-90 40 40)"
+              style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-lg font-black tabular-nums text-white leading-none">
+              {calPct}%
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-semibold uppercase tracking-widest text-gray-400">Calorii</span>
+          <div className="flex items-baseline gap-1">
+            <span className="text-3xl font-black tabular-nums text-white">{logged.calories}</span>
+            <span className="text-sm text-gray-500">/ {calorieTarget} kcal</span>
+          </div>
+          <span className="text-xs text-gray-500">
+            {logged.calories <= calorieTarget
+              ? `${calorieTarget - logged.calories} kcal rămase`
+              : `${logged.calories - calorieTarget} kcal peste țintă`}
+          </span>
+          {eatBackKcal > 0 && (
+            <span className="text-[10px] text-amber-400/90 mt-0.5">
+              +{eatBackKcal} kcal mișcare (țintă de bază {targets.calories})
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div
+        className="rounded-2xl p-4 flex flex-col gap-4"
+        style={{ backgroundColor: '#1a1d27', border: '1px solid #2a2f45' }}
+      >
+        {(logged.protein + logged.carbs + logged.fat) > 0 && (() => {
+          const totalG   = logged.protein + logged.carbs + logged.fat;
+          const pPct     = Math.round((logged.protein / totalG) * 100);
+          const cPct     = Math.round((logged.carbs   / totalG) * 100);
+          const fPct     = 100 - pPct - cPct;
+          return (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex justify-between text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                <span>Raport macro</span>
+                <span className="font-normal">{formatMacroGrams(totalG)}g total</span>
+              </div>
+              <div className="flex h-3 rounded-full overflow-hidden gap-px">
+                {pPct > 0 && <div className="bg-blue-500  transition-all" style={{ width: `${pPct}%` }} />}
+                {cPct > 0 && <div className="bg-amber-500 transition-all" style={{ width: `${cPct}%` }} />}
+                {fPct > 0 && <div className="bg-rose-500  transition-all" style={{ width: `${fPct}%` }} />}
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
+                <span className="flex items-center gap-1 text-blue-400"><span className="w-2 h-2 rounded-sm bg-blue-500"/>Proteine {pPct}%</span>
+                <span className="flex items-center gap-1 text-amber-400"><span className="w-2 h-2 rounded-sm bg-amber-500"/>Carbs {cPct}%</span>
+                <span className="flex items-center gap-1 text-rose-400"><span className="w-2 h-2 rounded-sm bg-rose-500"/>Fats {fPct}%</span>
+              </div>
+            </div>
+          );
+        })()}
+
+        <MacroBar label="Proteine" consumed={logged.protein} target={targets.protein} unit="g" color="bg-blue-500" />
+        <MacroBar label="Carbs"   consumed={logged.carbs}   target={targets.carbs}   unit="g" color="bg-amber-500" />
+        <MacroBar label="Fats"    consumed={logged.fat}     target={targets.fat}     unit="g" color="bg-rose-500" />
+
+        {!hasLogged && (
+          <p className="text-center text-gray-500 text-xs py-2 leading-relaxed">
+            Nimic logat azi. Adaugă alimente la Mic dejun sau generează un plan mai jos.
+          </p>
+        )}
+      </div>
+
+      {/* ── Logare mese ────────────────────────────────────────────── */}
+      <div className="flex flex-col gap-3">
+        <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
+          Ce ai mâncat azi
+        </span>
+
+        <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+          {MEAL_SLOTS.map((slot) => (
+            <button
+              key={slot}
+              type="button"
+              onClick={() => setScanMeal(slot)}
+              className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
+                scanMeal === slot
+                  ? 'bg-violet-600/30 border-violet-500/50 text-violet-200'
+                  : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+              }`}
+            >
+              {MEAL_ICONS[slot]} {MEAL_LABELS[slot]}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={scanning}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold
+                       bg-violet-600/20 border border-violet-500/40 text-violet-300
+                       hover:bg-violet-600/30 active:bg-violet-600/40
+                       disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {scanning ? 'Analizez…' : '📷 Scan'}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleImageChange}
+          />
+        </div>
+
+        {preview && (
+          <div className="relative rounded-xl overflow-hidden border border-gray-700">
+            <img src={preview} alt="Previzualizare masă" className="w-full max-h-48 object-cover" />
+            {scanning && (
+              <div className="absolute inset-0 bg-gray-900/70 flex items-center justify-center">
+                <span className="text-sm font-semibold text-violet-300 animate-pulse">Analizez…</span>
+              </div>
+            )}
+            {scanStatus === 'ok' && (
+              <div className="absolute bottom-0 inset-x-0 bg-green-500/20 border-t border-green-500/40 px-3 py-1.5">
+                <p className="text-xs font-semibold text-green-400">
+                  ✓ Macro detectate — {MEAL_LABELS[scanMeal]}
+                </p>
+              </div>
+            )}
+            {scanStatus === 'err' && (
+              <div className="absolute bottom-0 inset-x-0 bg-red-500/20 border-t border-red-500/40 px-3 py-1.5">
+                <p className="text-xs font-semibold text-red-400">⚠ Nu am putut analiza — completează manual</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2">
+          {MEAL_SLOTS.map((slot) => (
+            <MealIntakeSection
+              key={slot}
+              slot={slot}
+              label={MEAL_LABELS[slot]}
+              icon={MEAL_ICONS[slot]}
+              fields={dayMeals[slot]}
+              onChange={(fields) => setMealFields(slot, fields)}
+              defaultExpanded={slot === 'breakfast'}
+              pickerItems={planPickerItems[slot]}
+              pickerKey={planPickerKey}
+              slotCalorieTarget={slotCalorieTargets[slot]}
+            />
+          ))}
+        </div>
+
+        {(() => {
+          const dayPreview = sumDayMeals(storedMealsFromForm(dayMeals));
+          return (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] text-gray-500 tabular-nums">
+                Total zi:{' '}
+                <span className="text-white font-semibold">{dayPreview.calories} kcal</span>
+                {' · '}
+                {dayPreview.protein}g P · {dayPreview.carbs}g C · {dayPreview.fat}g F
+              </p>
+              {autoSaveStatus === 'saving' && (
+                <span className="text-[11px] text-gray-400 shrink-0">Se salvează…</span>
+              )}
+              {autoSaveStatus === 'saved' && (
+                <span className="text-[11px] text-green-400 shrink-0">Salvat ✓</span>
+              )}
+              {autoSaveStatus === 'err' && (
+                <span className="text-[11px] text-red-400 shrink-0">Eroare la salvare</span>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* ── Plan alimentar ─────────────────────────────────────────── */}
       <button
         type="button"
         onClick={handleSolveMacros}
@@ -458,98 +734,6 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
         </p>
       )}
 
-      {/* Calorie ring-style hero */}
-      <div
-        className="rounded-2xl p-5 flex items-center gap-5"
-        style={{ backgroundColor: '#1a1d27', border: '1px solid #2a2f45' }}
-      >
-        {/* Circular progress (SVG) */}
-        <div className="relative flex-shrink-0" style={{ width: 80, height: 80 }}>
-          <svg width="80" height="80" viewBox="0 0 80 80">
-            {/* track */}
-            <circle cx="40" cy="40" r="32" fill="none" stroke="#2a2f45" strokeWidth="8" />
-            {/* progress */}
-            <circle
-              cx="40" cy="40" r="32" fill="none"
-              stroke={calPct > 100 ? '#ef4444' : '#7c3aed'}
-              strokeWidth="8"
-              strokeLinecap="round"
-              strokeDasharray={`${2 * Math.PI * 32}`}
-              strokeDashoffset={`${2 * Math.PI * 32 * (1 - clamp(calPct) / 100)}`}
-              transform="rotate(-90 40 40)"
-              style={{ transition: 'stroke-dashoffset 0.5s ease' }}
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-lg font-black tabular-nums text-white leading-none">
-              {calPct}%
-            </span>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-0.5">
-          <span className="text-xs font-semibold uppercase tracking-widest text-gray-400">Calories</span>
-          <div className="flex items-baseline gap-1">
-            <span className="text-3xl font-black tabular-nums text-white">{logged.calories}</span>
-            <span className="text-sm text-gray-500">/ {targets.calories} kcal</span>
-          </div>
-          <span className="text-xs text-gray-500">
-            {logged.calories <= targets.calories
-              ? `${targets.calories - logged.calories} kcal remaining`
-              : `${logged.calories - targets.calories} kcal over target`}
-          </span>
-        </div>
-      </div>
-
-      {/* Macro progress bars */}
-      <div
-        className="rounded-2xl p-4 flex flex-col gap-4"
-        style={{ backgroundColor: '#1a1d27', border: '1px solid #2a2f45' }}
-      >
-        {/* Macro split proportional bar */}
-        {(logged.protein + logged.carbs + logged.fat) > 0 && (() => {
-          const totalG   = logged.protein + logged.carbs + logged.fat;
-          const pPct     = Math.round((logged.protein / totalG) * 100);
-          const cPct     = Math.round((logged.carbs   / totalG) * 100);
-          const fPct     = 100 - pPct - cPct;
-          return (
-            <div className="flex flex-col gap-1.5">
-              <div className="flex justify-between text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                <span>Macro split</span>
-                <span className="font-normal">{formatMacroGrams(totalG)}g total</span>
-              </div>
-              <div className="flex h-3 rounded-full overflow-hidden gap-px">
-                {pPct > 0 && <div className="bg-blue-500  transition-all" style={{ width: `${pPct}%` }} title={`Proteine ${pPct}%`} />}
-                {cPct > 0 && <div className="bg-amber-500 transition-all" style={{ width: `${cPct}%` }} title={`Carbs ${cPct}%`} />}
-                {fPct > 0 && <div className="bg-rose-500  transition-all" style={{ width: `${fPct}%` }} title={`Fats ${fPct}%`} />}
-              </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
-                <span className="flex items-center gap-1 text-blue-400"><span className="w-2 h-2 rounded-sm bg-blue-500"/>Proteine {pPct}%</span>
-                <span className="flex items-center gap-1 text-amber-400"><span className="w-2 h-2 rounded-sm bg-amber-500"/>Carbs {cPct}%</span>
-                <span className="flex items-center gap-1 text-rose-400"><span className="w-2 h-2 rounded-sm bg-rose-500"/>Fats {fPct}%</span>
-              </div>
-            </div>
-          );
-        })()}
-
-        <MacroBar label="Proteine" consumed={logged.protein} target={targets.protein} unit="g" color="bg-blue-500" />
-        <MacroBar label="Carbs"   consumed={logged.carbs}   target={targets.carbs}   unit="g" color="bg-amber-500" />
-        <MacroBar label="Fats"    consumed={logged.fat}     target={targets.fat}     unit="g" color="bg-rose-500" />
-
-        <p className="text-[10px] text-gray-500 leading-snug">
-          Ținta de carbs ({formatMacroGrams(targets.carbs)}g) = caloriile rămase după proteine (
-          {formatMacroGrams(targets.protein)}g) și grăsimi ({formatMacroGrams(targets.fat)}g). Ajustează în Profil
-          dacă vrei mai mulți carbohidrați.
-        </p>
-
-        {/* Nothing logged yet — empty state */}
-        {logged.calories === 0 && logged.protein === 0 && logged.carbs === 0 && logged.fat === 0 && (
-          <p className="text-center text-gray-500 text-xs py-2">
-            No intake logged today. Log each meal below or use Solve Macros.
-          </p>
-        )}
-      </div>
-
       {solveError && (
         <div className="rounded-xl px-4 py-3 bg-red-900/40 border border-red-500/40">
           <p className="text-xs font-semibold text-red-400">⚠ Eroare plan alimentar</p>
@@ -557,19 +741,23 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
         </div>
       )}
 
-      {/* ── AI Meal Plan card ──────────────────────────────────────── */}
+      {regenError && (
+        <div className="rounded-xl px-4 py-3 bg-red-900/40 border border-red-500/40">
+          <p className="text-[11px] text-red-300/70">{regenError}</p>
+        </div>
+      )}
+
       {mealPlan && (
         <div
           className="rounded-2xl flex flex-col gap-4 p-4"
           style={{ backgroundColor: '#0f1a12', border: '1px solid #166534' }}
         >
-          {/* Plan header */}
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-bold text-emerald-300">🧮 Plan alimentar</p>
               <p className="text-[11px] text-emerald-400/60 mt-0.5">
-                {mealPlan.daily_totals.calories} kcal · {mealPlan.daily_totals.protein}g Proteine ·{' '}
-                {mealPlan.daily_totals.carbs}g Carbs · {mealPlan.daily_totals.fat}g Fats
+                {mealPlan.daily_totals.calories} kcal · {mealPlan.daily_totals.protein}g P ·{' '}
+                {mealPlan.daily_totals.carbs}g C · {mealPlan.daily_totals.fat}g F
               </p>
             </div>
             <button
@@ -580,173 +768,74 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
                          bg-emerald-600/30 border border-emerald-500/50 text-emerald-300
                          hover:bg-emerald-600/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {logStatus === 'ok'
-                ? '✓ Logged'
-                : logging
-                ? 'Logging…'
-                : '📥 Log These Meals'}
+              {logStatus === 'ok' ? '✓ Logat' : logging ? 'Loghez…' : '📥 Loghează mesele'}
             </button>
           </div>
           {logStatus === 'err' && (
-            <p className="text-[11px] text-red-400">Failed to log. Try again.</p>
+            <p className="text-[11px] text-red-400">Eroare la logare. Încearcă din nou.</p>
           )}
 
-          {/* Meal cards */}
-          {mealPlan.meals.map((meal, mi) => (
-            <div
-              key={mi}
-              className="rounded-xl flex flex-col gap-2 p-3"
-              style={{ backgroundColor: '#0a1a0d', border: '1px solid #14532d' }}
-            >
-              <div className="flex flex-col gap-0.5">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-bold text-emerald-200">{meal.meal_name}</p>
-                  <span className="text-[11px] font-semibold text-emerald-400/70 shrink-0">
-                    {meal.total_calories} kcal
-                  </span>
-                </div>
-                {meal.recipe_name && (
-                  <p className="text-[11px] text-emerald-100/90 leading-snug">{meal.recipe_name}</p>
-                )}
-              </div>
-
-              {/* Ingredient rows */}
-              <div className="flex flex-col gap-1">
-                {/* Column headers */}
-                <div className="grid text-[10px] text-gray-500 font-semibold uppercase tracking-wide"
-                     style={{ gridTemplateColumns: '1fr 44px 36px 36px 36px 44px' }}>
-                  <span>Ingredient</span>
-                  <span className="text-right">g</span>
-                  <span className="text-right">Proteine</span>
-                  <span className="text-right">Carbs</span>
-                  <span className="text-right">Fats</span>
-                  <span className="text-right">kcal</span>
-                </div>
-                {meal.ingredients.map((ing, ii) => (
-                  <div
-                    key={ii}
-                    className="grid items-center py-1 border-t border-gray-800/60 text-[11px]"
-                    style={{ gridTemplateColumns: '1fr 44px 36px 36px 36px 44px' }}
-                  >
-                    <span className="text-gray-200 truncate pr-1">{ing.item}</span>
-                    <span className="text-right font-bold text-white tabular-nums">{ing.amount_g}g</span>
-                    <span className="text-right text-blue-300 tabular-nums">{ing.protein}</span>
-                    <span className="text-right text-amber-300 tabular-nums">{ing.carbs}</span>
-                    <span className="text-right text-rose-300 tabular-nums">{ing.fat}</span>
-                    <span className="text-right text-gray-400 tabular-nums">{ing.calories}</span>
+          {mealPlan.meals.map((meal, mi) => {
+            const slot = mealSlotFromPlanName(meal.meal_name);
+            return (
+              <div
+                key={mi}
+                className="rounded-xl flex flex-col gap-2 p-3"
+                style={{ backgroundColor: '#0a1a0d', border: '1px solid #14532d' }}
+              >
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-bold text-emerald-200">{meal.meal_name}</p>
+                    <span className="text-[11px] font-semibold text-emerald-400/70 shrink-0">
+                      {meal.total_calories} kcal
+                    </span>
                   </div>
-                ))}
+                  {meal.recipe_name && (
+                    <p className="text-[11px] text-emerald-100/90 leading-snug">{meal.recipe_name}</p>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <div className="grid text-[10px] text-gray-500 font-semibold uppercase tracking-wide"
+                       style={{ gridTemplateColumns: '1fr 44px 36px 36px 36px 44px' }}>
+                    <span>Ingredient</span>
+                    <span className="text-right">g</span>
+                    <span className="text-right">P</span>
+                    <span className="text-right">C</span>
+                    <span className="text-right">F</span>
+                    <span className="text-right">kcal</span>
+                  </div>
+                  {meal.ingredients.map((ing, ii) => (
+                    <div
+                      key={ii}
+                      className="grid items-center py-1 border-t border-gray-800/60 text-[11px]"
+                      style={{ gridTemplateColumns: '1fr 44px 36px 36px 36px 44px' }}
+                    >
+                      <span className="text-gray-200 truncate pr-1">{ing.item}</span>
+                      <span className="text-right font-bold text-white tabular-nums">{ing.amount_g}g</span>
+                      <span className="text-right text-blue-300 tabular-nums">{ing.protein}</span>
+                      <span className="text-right text-amber-300 tabular-nums">{ing.carbs}</span>
+                      <span className="text-right text-rose-300 tabular-nums">{ing.fat}</span>
+                      <span className="text-right text-gray-400 tabular-nums">{ing.calories}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleRegenerateMeal(slot)}
+                  disabled={regeneratingSlot === slot}
+                  className="self-start px-2.5 py-1 rounded-lg text-[10px] font-semibold
+                             bg-emerald-900/40 border border-emerald-700/50 text-emerald-300/90
+                             hover:bg-emerald-900/60 disabled:opacity-50"
+                >
+                  {regeneratingSlot === slot ? 'Schimb…' : '↻ Altă rețetă'}
+                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
-
-      {/* Meal logging */}
-      <div className="flex flex-col gap-3">
-        <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
-          Ce ai mâncat azi
-        </span>
-
-        <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
-          {MEAL_SLOTS.map((slot) => (
-            <button
-              key={slot}
-              type="button"
-              onClick={() => setScanMeal(slot)}
-              className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
-                scanMeal === slot
-                  ? 'bg-violet-600/30 border-violet-500/50 text-violet-200'
-                  : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
-              }`}
-            >
-              {MEAL_ICONS[slot]} {MEAL_LABELS[slot]}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={scanning}
-            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold
-                       bg-violet-600/20 border border-violet-500/40 text-violet-300
-                       hover:bg-violet-600/30 active:bg-violet-600/40
-                       disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {scanning ? 'Scanning…' : '📷 Scan'}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handleImageChange}
-          />
-        </div>
-
-        {/* Image preview + scan feedback */}
-        {preview && (
-          <div className="relative rounded-xl overflow-hidden border border-gray-700">
-            <img src={preview} alt="Meal preview" className="w-full max-h-48 object-cover" />
-            {scanning && (
-              <div className="absolute inset-0 bg-gray-900/70 flex items-center justify-center">
-                <span className="text-sm font-semibold text-violet-300 animate-pulse">Analyzing…</span>
-              </div>
-            )}
-            {scanStatus === 'ok' && (
-              <div className="absolute bottom-0 inset-x-0 bg-green-500/20 border-t border-green-500/40 px-3 py-1.5">
-                <p className="text-xs font-semibold text-green-400">
-                  ✓ Macros detectate — {MEAL_LABELS[scanMeal]}
-                </p>
-              </div>
-            )}
-            {scanStatus === 'err' && (
-              <div className="absolute bottom-0 inset-x-0 bg-red-500/20 border-t border-red-500/40 px-3 py-1.5">
-                <p className="text-xs font-semibold text-red-400">⚠ Could not analyze image — fill manually</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex flex-col gap-2">
-          {MEAL_SLOTS.map((slot) => (
-            <MealIntakeSection
-              key={slot}
-              slot={slot}
-              label={MEAL_LABELS[slot]}
-              icon={MEAL_ICONS[slot]}
-              fields={dayMeals[slot]}
-              onChange={(fields) => setMealFields(slot, fields)}
-              defaultExpanded={slot === 'breakfast'}
-              pickerItems={planPickerItems[slot]}
-              pickerKey={planPickerKey}
-            />
-          ))}
-        </div>
-
-        {(() => {
-          const preview = sumDayMeals(storedMealsFromForm(dayMeals));
-          return (
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] text-gray-500 tabular-nums">
-                Total zi:{' '}
-                <span className="text-white font-semibold">{preview.calories} kcal</span>
-                {' · '}
-                {preview.protein}g P · {preview.carbs}g C · {preview.fat}g F
-              </p>
-              {autoSaveStatus === 'saving' && (
-                <span className="text-[11px] text-gray-400 shrink-0">Se salvează…</span>
-              )}
-              {autoSaveStatus === 'saved' && (
-                <span className="text-[11px] text-green-400 shrink-0">Salvat ✓</span>
-              )}
-              {autoSaveStatus === 'err' && (
-                <span className="text-[11px] text-red-400 shrink-0">Eroare la salvare</span>
-              )}
-            </div>
-          );
-        })()}
-      </div>
     </div>
   );
 }
