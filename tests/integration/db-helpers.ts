@@ -105,6 +105,17 @@ export async function initSchema(client: ReturnType<typeof createClient>) {
       is_archived   INTEGER NOT NULL DEFAULT 0,
       created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     );
+
+    CREATE TABLE IF NOT EXISTS bend_sessions (
+      id            TEXT    PRIMARY KEY NOT NULL,
+      user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      date          TEXT    NOT NULL,
+      timestamp     INTEGER NOT NULL,
+      routine_name  TEXT    NOT NULL,
+      session_json  TEXT    NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS bend_sessions_user_date_idx ON bend_sessions (user_id, date);
   `);
 }
 

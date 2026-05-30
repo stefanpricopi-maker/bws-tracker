@@ -19,10 +19,11 @@ import PullToRefresh        from './PullToRefresh';
 import Onboarding, { needsOnboarding, markOnboardingDone, clearOnboarding } from './Onboarding';
 import { getStoredLocale, t } from '../lib/i18n';
 import { WorkoutPlayerProvider } from '../context/WorkoutPlayerContext';
+import { BendSessionTracker } from '../bend';
 
 // ── Tab definitions ────────────────────────────────────────────────────────
 
-type Tab = 'dashboard' | 'workout' | 'diet' | 'stats' | 'profile';
+type Tab = 'dashboard' | 'workout' | 'bend' | 'diet' | 'stats' | 'profile';
 
 interface NavItem {
   id:    Tab;
@@ -32,7 +33,8 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { id: 'dashboard', label: 'Home',    icon: '🏠'  },
-  { id: 'workout',   label: 'Workout', icon: '🏋'  },
+  { id: 'workout',   label: 'Lift',    icon: '🏋'  },
+  { id: 'bend',      label: 'Bend',    icon: '🧘'  },
   { id: 'diet',      label: 'Diet',    icon: '🥗'  },
   { id: 'stats',     label: 'Stats',   icon: '📊'  },
   { id: 'profile',   label: 'Profile', icon: '👤'  },
@@ -167,7 +169,7 @@ export default function Dashboard() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
-    if (tab === 'dashboard' || tab === 'workout' || tab === 'diet' || tab === 'stats' || tab === 'profile') {
+    if (tab === 'dashboard' || tab === 'workout' || tab === 'bend' || tab === 'diet' || tab === 'stats' || tab === 'profile') {
       setActive(tab);
     }
     const status = params.get('google_auth');
@@ -265,6 +267,11 @@ export default function Dashboard() {
         {active === 'workout'   && (
           <div data-testid="workout-panel">
             <WorkoutTab />
+          </div>
+        )}
+        {active === 'bend'      && (
+          <div data-testid="bend-panel">
+            <BendSessionTracker />
           </div>
         )}
         {active === 'diet'      && (

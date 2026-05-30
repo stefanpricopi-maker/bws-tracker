@@ -4,7 +4,8 @@ const STRINGS: Record<Locale, Record<string, string>> = {
   en: {
     nav_home: 'Home',
     nav_dashboard: 'Home',
-    nav_workout: 'Workout',
+    nav_workout: 'Lift',
+    nav_bend: 'Bend',
     nav_diet: 'Diet',
     nav_stats: 'Stats',
     nav_profile: 'Profile',
@@ -17,6 +18,7 @@ const STRINGS: Record<Locale, Record<string, string>> = {
     nav_home: 'Acasă',
     nav_dashboard: 'Acasă',
     nav_workout: 'Antrenament',
+    nav_bend: 'Bend',
     nav_diet: 'Dietă',
     nav_stats: 'Statistici',
     nav_profile: 'Profil',

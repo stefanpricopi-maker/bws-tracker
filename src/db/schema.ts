@@ -125,3 +125,17 @@ export const exercises = sqliteTable('exercises', {
 
 export type Exercise    = typeof exercises.$inferSelect;
 export type NewExercise = typeof exercises.$inferInsert;
+
+export const bendSessions = sqliteTable('bend_sessions', {
+  id:          text('id').primaryKey(),
+  userId:      integer('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  date:        text('date').notNull(),
+  timestamp:   integer('timestamp').notNull(),
+  routineName: text('routine_name').notNull(),
+  sessionJson: text('session_json').notNull(),
+});
+
+export type BendSessionRow = typeof bendSessions.$inferSelect;
+export type NewBendSessionRow = typeof bendSessions.$inferInsert;
