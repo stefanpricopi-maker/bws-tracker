@@ -36,6 +36,7 @@ const RO_FOOD_TERMS: [RegExp, string][] = [
   [/\bov[aă]z\b/gi, 'oats'],
   [/\bcurmale\b/gi, 'dates'],
   [/\blapte\b/gi, 'milk'],
+  [/\bbanab[aă][aă]?\b/gi, 'banana'],
   [/\bbanan[aă]\b/gi, 'banana'],
   [/\bou[aă]\b/gi, 'eggs'],
   [/\bp[aâ]ine\b/gi, 'bread'],
@@ -207,7 +208,84 @@ export function sumMacros(parts: RawMacros[]): MealMacrosEstimate {
   return normalizeMealMacros(total);
 }
 
-async function searchUsdaFood(query: string, apiKey: string): Promise<FdcFood | null> {
+/** Prefer specific USDA queries over naive single-word search. */
+const USDA_SEARCH_HINTS: Record<string, string> = {
+  oats:           'oats raw',
+  milk:           'whole milk',
+  banana:         'banana raw',
+  dates:          'date',
+  date:           'date',
+  'peanut butter': 'peanut butter',
+};
+
+/** Penalize common false-positive matches from USDA search. */
+const EXCLUDE_TERMS: Record<string, string[]> = {
+  oats: ['milk', 'oil', 'bread', 'cookie', 'cracker', 'flour', 'meal, prepared'],
+  milk: [
+    'human', 'coconut', 'almond', 'soy', 'goat', 'crackers', 'chocolate',
+    'strawberry', 'evaporated', 'dry', 'beef', 'cow head', 'sheep', 'buffalo', 'buttermilk',
+  ],
+  banana: ['dehydrated', 'powder', 'chip', 'bread', 'baked', 'pudding'],
+  dates:  ['date sugar', 'date paste'],
+  date:   ['date sugar', 'date paste'],
+  'peanut butter': ['cookie', 'sandwich', 'cup', 'candy', 'crystal', 'fudge'],
+};
+
+function scoreFoodCandidate(query: string, food: FdcFood, grams: number): number {
+  const desc = (food.description ?? '').toLowerCase();
+  const q = query.toLowerCase();
+  const per100 = extractPer100gMacros(food);
+  if (per100.calories === 0 && per100.protein === 0 && per100.carbs === 0 && per100.fat === 0) {
+    return -10_000;
+  }
+
+  let score = 0;
+  if (desc === q) score += 120;
+  if (desc.startsWith(`${q},`)) score += 100;
+  if (desc.includes(q)) score += 40;
+
+  for (const bad of EXCLUDE_TERMS[q] ?? []) {
+    if (desc.includes(bad)) score -= 250;
+  }
+
+  if (q === 'oats' && desc.includes('raw')) score += 180;
+  if (q === 'milk' && desc === 'milk, whole') score += 220;
+  if (q === 'milk' && desc.includes('whole') && !desc.includes('chocolate')) score += 90;
+  if (q === 'banana' && desc.includes('raw')) score += 180;
+  if (q === 'peanut butter' && desc === 'peanut butter') score += 220;
+  if ((q === 'dates' || q === 'date') && (desc === 'date' || desc.startsWith('dates,'))) score += 120;
+
+  // 200g "oats" is dry grain, not oat milk (~45 kcal/100g).
+  if (grams >= 150 && q === 'oats' && per100.calories < 150) score -= 400;
+
+  return score;
+}
+
+export function pickBestUsdaFood(
+  query: string,
+  foods: FdcFood[],
+  grams: number,
+): FdcFood | null {
+  let best: FdcFood | null = null;
+  let bestScore = -Infinity;
+
+  for (const food of foods) {
+    const score = scoreFoodCandidate(query, food, grams);
+    if (score > bestScore) {
+      bestScore = score;
+      best = food;
+    }
+  }
+
+  return bestScore > -1000 ? best : null;
+}
+
+async function searchUsdaFood(
+  query: string,
+  apiKey: string,
+  grams: number,
+): Promise<FdcFood | null> {
+  const searchQuery = USDA_SEARCH_HINTS[query.toLowerCase()] ?? query;
   const url = new URL('https://api.nal.usda.gov/fdc/v1/foods/search');
   url.searchParams.set('api_key', apiKey);
 
@@ -215,8 +293,8 @@ async function searchUsdaFood(query: string, apiKey: string): Promise<FdcFood | 
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({
-      query,
-      pageSize: 1,
+      query:    searchQuery,
+      pageSize: 25,
       dataType: ['Foundation', 'SR Legacy', 'Survey (FNDDS)'],
     }),
   });
@@ -224,7 +302,8 @@ async function searchUsdaFood(query: string, apiKey: string): Promise<FdcFood | 
   if (!res.ok) return null;
 
   const data = await res.json().catch(() => null) as { foods?: FdcFood[] } | null;
-  return data?.foods?.[0] ?? null;
+  const foods = data?.foods ?? [];
+  return pickBestUsdaFood(query, foods, grams);
 }
 
 export async function estimateMealFromNutritionApi(
@@ -256,7 +335,7 @@ export async function estimateMealFromNutritionApi(
 
     let food: FdcFood | null;
     try {
-      food = await searchUsdaFood(parsed.query, apiKey);
+      food = await searchUsdaFood(parsed.query, apiKey, parsed.grams);
     } catch (err) {
       throw new AiRouteError(
         'ai_network',

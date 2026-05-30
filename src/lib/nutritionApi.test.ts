@@ -4,6 +4,7 @@ import {
   normalizeIngredientForApi,
   parseIngredientQuantity,
   parseMealDescriptionToIngredients,
+  pickBestUsdaFood,
   scaleMacros,
   sumMacros,
 } from './nutritionApi';
@@ -20,7 +21,32 @@ describe('nutritionApi', () => {
   it('normalizes Romanian ingredient lines', () => {
     expect(normalizeIngredientForApi('fulgi de ovaz 200g')).toBe('oats 200g');
     expect(normalizeIngredientForApi('o banana')).toBe('1 banana');
+    expect(normalizeIngredientForApi('o banaba')).toBe('1 banana');
     expect(normalizeIngredientForApi('o lingura peanut butter')).toBe('1 tbsp peanut butter');
+  });
+
+  it('prefers raw oats over oat milk for large portions', () => {
+    const foods = [
+      {
+        description: 'Oat milk',
+        foodNutrients: [
+          { nutrientId: 1008, value: 45 },
+          { nutrientId: 1003, value: 0.66 },
+          { nutrientId: 1005, value: 5.37 },
+          { nutrientId: 1004, value: 2.33 },
+        ],
+      },
+      {
+        description: 'Oats, raw',
+        foodNutrients: [
+          { nutrientId: 1008, value: 379 },
+          { nutrientId: 1003, value: 13.15 },
+          { nutrientId: 1005, value: 67.7 },
+          { nutrientId: 1004, value: 6.52 },
+        ],
+      },
+    ];
+    expect(pickBestUsdaFood('oats', foods, 200)?.description).toBe('Oats, raw');
   });
 
   it('parses quantities from ingredient lines', () => {
