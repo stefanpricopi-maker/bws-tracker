@@ -625,10 +625,10 @@ export default function DietTracker() {
           {/* Plan header */}
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-bold text-emerald-300">🧮 AI Meal Plan</p>
+              <p className="text-sm font-bold text-emerald-300">🧮 Plan alimentar</p>
               <p className="text-[11px] text-emerald-400/60 mt-0.5">
-                {mealPlan.daily_totals.calories} kcal · {mealPlan.daily_totals.protein}g P ·{' '}
-                {mealPlan.daily_totals.carbs}g C · {mealPlan.daily_totals.fat}g F
+                {mealPlan.daily_totals.calories} kcal · {mealPlan.daily_totals.protein}g Proteine ·{' '}
+                {mealPlan.daily_totals.carbs}g Carbs · {mealPlan.daily_totals.fat}g Fats
               </p>
             </div>
             <button
@@ -671,9 +671,9 @@ export default function DietTracker() {
                      style={{ gridTemplateColumns: '1fr 44px 36px 36px 36px 44px' }}>
                   <span>Ingredient</span>
                   <span className="text-right">g</span>
-                  <span className="text-right">P</span>
-                  <span className="text-right">C</span>
-                  <span className="text-right">F</span>
+                  <span className="text-right">Proteine</span>
+                  <span className="text-right">Carbs</span>
+                  <span className="text-right">Fats</span>
                   <span className="text-right">kcal</span>
                 </div>
                 {meal.ingredients.map((ing, ii) => (
