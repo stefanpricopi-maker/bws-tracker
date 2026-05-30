@@ -9,6 +9,7 @@ import {
   getAiConfig,
   parseLlmJson,
 } from '../../lib/aiApi';
+import { normalizeMealMacros } from '../../lib/mealMacrosAi';
 
 const SYSTEM_PROMPT =
   'Analyze this image of a meal or nutrition label. Estimate the total Calories, Protein (g), Carbs (g), and Fat (g). Return strictly a JSON object with keys: calories, protein, carbs, fat.';
@@ -57,12 +58,7 @@ export const POST: APIRoute = async ({ request }) => {
       fat?: number;
     }>(raw, 'Could not parse macros from AI response.');
 
-    return aiJson({
-      calories: Math.round(Number(macros.calories) || 0),
-      protein:  Math.round(Number(macros.protein)  || 0),
-      carbs:    Math.round(Number(macros.carbs)     || 0),
-      fat:      Math.round(Number(macros.fat)       || 0),
-    });
+    return aiJson(normalizeMealMacros(macros));
   } catch (err) {
     return catchAiRouteError(err, 'vision');
   }
