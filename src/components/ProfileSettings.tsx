@@ -152,7 +152,7 @@ export default function ProfileSettings({ onReplayOnboarding }: ProfileSettingsP
     const h = parseFloat(calcHeight);
     const a = parseFloat(calcAge);
     const act = parseFloat(calcActivity);
-    if (!w || !h || !a) return;
+    if (!w || !h || !a || !act) return;
 
     const t = calculateTdeeFromWeight({
       weightKg: w,

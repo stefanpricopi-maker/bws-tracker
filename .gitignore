@@ -44,3 +44,4 @@ mcp-server/dist/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+.vercel

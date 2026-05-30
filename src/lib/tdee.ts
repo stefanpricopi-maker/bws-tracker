@@ -17,14 +17,19 @@ export interface TdeeResult {
   targetFat:      number;
 }
 
+/** `??` does not catch NaN — use this for optional numeric inputs. */
+function finiteOr(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
 /** Mifflin–St Jeor + activity factor; targets aligned with Profile TDEE calculator. */
 export function calculateTdeeFromWeight(input: TdeeInput): TdeeResult {
   const w   = input.weightKg;
-  const h   = input.heightCm ?? 175;
-  const a   = input.ageYears ?? 30;
-  const act = input.activityFactor ?? 1.55;
+  const h   = finiteOr(input.heightCm, 175);
+  const a   = finiteOr(input.ageYears, 30);
+  const act = finiteOr(input.activityFactor, 1.55);
   const sex = input.sex ?? 'male';
-  const loss = input.weeklyLossKg ?? 0.5;
+  const loss = finiteOr(input.weeklyLossKg, 0.5);
 
   const bmr =
     sex === 'male'
@@ -32,7 +37,8 @@ export function calculateTdeeFromWeight(input: TdeeInput): TdeeResult {
       : 10 * w + 6.25 * h - 5 * a - 161;
 
   const tdeeKcal = Math.round(bmr * act);
-  const targetCalories = Math.max(1200, tdeeKcal - Math.round((loss * 1000) / 7));
+  const dailyDeficit = Math.round((loss * 7700) / 7);
+  const targetCalories = Math.max(1200, tdeeKcal - dailyDeficit);
   const targetProtein  = proteinGramsForWeight(w);
   const { carbsG, fatG } = macrosFromCaloriesAndProtein(targetCalories, targetProtein);
 
