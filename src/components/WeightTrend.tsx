@@ -9,7 +9,8 @@ import {
   Tooltip,
 } from 'recharts';
 import { rollingAverage } from '../lib/fitness';
-import type { DayEntry, ChartPoint } from '../lib/fitness';
+import type { DayEntry } from '../lib/fitness';
+import { parseLocaleNumber } from '../lib/parseLocaleNumber';
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr + 'T00:00:00');
@@ -47,16 +48,17 @@ export default function WeightTrend() {
   useEffect(() => {
     fetch('/api/logs?days=30')
       .then((r) => r.json())
-      .then((rows: Array<{ date: string; weightKg: number | null }>) => {
+      .then((rows: Array<{ date: string; weight_kg: number | null }>) => {
         const parsed: DayEntry[] = rows
-          .filter((r): r is { date: string; weightKg: number } => r.weightKg != null)
-          .map((r) => ({ date: r.date, weight: r.weightKg }))
+          .filter((r): r is { date: string; weight_kg: number } => r.weight_kg != null)
+          .map((r) => ({ date: r.date, weight: r.weight_kg }))
           .sort((a, b) => a.date.localeCompare(b.date));
         setEntries(parsed);
 
-        // Pre-fill input with today's weight if already logged
         const todayRow = rows.find((r) => r.date === today());
-        if (todayRow?.weightKg != null) setInput(todayRow.weightKg.toString());
+        if (todayRow?.weight_kg != null) {
+          setInput(String(todayRow.weight_kg).replace('.', ','));
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -68,9 +70,9 @@ export default function WeightTrend() {
 
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
-    const val = parseFloat(input);
-    if (isNaN(val) || val < 30 || val > 300) {
-      setError('Enter a valid weight between 30 and 300 kg.');
+    const val = parseLocaleNumber(input);
+    if (val == null || val < 30 || val > 300) {
+      setError('Introdu o greutate validă (30–300 kg), ex. 92,9 sau 92.9.');
       return;
     }
     setError('');
@@ -82,7 +84,8 @@ export default function WeightTrend() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ date: today(), weight_kg: val }),
       });
-      if (!res.ok) throw new Error();
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Save failed');
 
       // Optimistic local update
       setEntries((prev) => {
@@ -92,8 +95,9 @@ export default function WeightTrend() {
         );
       });
       setStatus('ok');
-    } catch {
+    } catch (err) {
       setStatus('err');
+      setError(err instanceof Error ? err.message : 'Nu s-a putut salva. Încearcă din nou.');
     } finally {
       setSaving(false);
     }
@@ -175,13 +179,15 @@ export default function WeightTrend() {
         </span>
         <div className="flex gap-2">
           <input
-            type="number"
-            step="0.1"
-            min="30"
-            max="300"
-            placeholder="e.g. 87.4"
+            type="text"
+            inputMode="decimal"
+            placeholder="ex. 92,9"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              setError('');
+              setStatus('idle');
+            }}
             className="flex-1 rounded-xl bg-gray-800 border border-gray-700
                        px-4 py-3 text-white placeholder-gray-600 text-sm
                        focus:outline-none focus:border-violet-500 transition-colors"
@@ -196,8 +202,10 @@ export default function WeightTrend() {
           </button>
         </div>
         {error  && <p className="text-xs text-red-400">{error}</p>}
-        {status === 'ok'  && <p className="text-xs text-green-400">Saved ✓</p>}
-        {status === 'err' && <p className="text-xs text-red-400">Failed to save. Try again.</p>}
+        {status === 'ok'  && <p className="text-xs text-green-400">Salvat ✓</p>}
+        {status === 'err' && !error && (
+          <p className="text-xs text-red-400">Nu s-a putut salva. Încearcă din nou.</p>
+        )}
       </form>
     </div>
   );

@@ -6,6 +6,7 @@ import {
   type StoredDayMeals,
   sumDayMeals,
 } from './mealIntake';
+import { parseLocaleNumber } from './parseLocaleNumber';
 
 export interface ValidatedLogPatch {
   weightKg?:    number;
@@ -24,8 +25,8 @@ function parseOptionalNumber(
   max: number,
 ): number | undefined | string {
   if (v == null || v === '') return undefined;
-  const n = typeof v === 'number' ? v : Number(v);
-  if (!Number.isFinite(n)) return `${label} must be a number.`;
+  const n = typeof v === 'number' ? v : parseLocaleNumber(v);
+  if (n == null) return `${label} must be a number.`;
   if (n < min || n > max) return `${label} must be between ${min} and ${max}.`;
   return n;
 }
