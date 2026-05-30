@@ -89,40 +89,53 @@ export const POST: APIRoute = async ({ request }) => {
 
   const date = typeof body.date === 'string' ? body.date : new Date().toISOString().slice(0, 10);
 
-  const validated = validateLogPatch(body);
-  if (!validated.ok) {
-    return new Response(JSON.stringify({ error: validated.error }), {
-      status: 400,
+  try {
+    const validated = validateLogPatch(body);
+    if (!validated.ok) {
+      return new Response(JSON.stringify({ error: validated.error }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const patch = validated.patch;
+
+    const [existing] = await db
+      .select({ id: dailyLogs.id })
+      .from(dailyLogs)
+      .where(and(eq(dailyLogs.userId, userId), eq(dailyLogs.date, date)))
+      .limit(1);
+
+    if (existing) {
+      await db.update(dailyLogs)
+        .set(patch)
+        .where(eq(dailyLogs.id, existing.id));
+    } else {
+      await db.insert(dailyLogs)
+        .values({ userId: userId, date, ...patch });
+    }
+
+    const [updated] = await db
+      .select()
+      .from(dailyLogs)
+      .where(and(eq(dailyLogs.userId, userId), eq(dailyLogs.date, date)))
+      .limit(1);
+
+    if (!updated) {
+      return new Response(JSON.stringify({ error: 'Log row not found after save.' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(JSON.stringify(toClientRow(updated)), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[logs POST]', err);
+    return new Response(JSON.stringify({ error: 'Database error. Run migrations on Turso?' }), {
+      status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
   }
-  const patch = validated.patch;
-
-  // Manual upsert — check for existing row first
-  const [existing] = await db
-    .select({ id: dailyLogs.id })
-    .from(dailyLogs)
-    .where(and(eq(dailyLogs.userId, userId), eq(dailyLogs.date, date)))
-    .limit(1);
-
-  if (existing) {
-    await db.update(dailyLogs)
-      .set(patch)
-      .where(eq(dailyLogs.id, existing.id));
-  } else {
-    await db.insert(dailyLogs)
-      .values({ userId: userId, date, ...patch });
-  }
-
-  // Return the updated row
-  const [updated] = await db
-    .select()
-    .from(dailyLogs)
-    .where(and(eq(dailyLogs.userId, userId), eq(dailyLogs.date, date)))
-    .limit(1);
-
-  return new Response(JSON.stringify(updated), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
 };

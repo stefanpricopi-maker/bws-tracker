@@ -16,6 +16,12 @@ describe('validateLogPatch', () => {
     expect(r.ok).toBe(false);
   });
 
+  it('accepts comma decimal for weight (RO locale)', () => {
+    const r = validateLogPatch({ weight_kg: '92,9' });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.patch.weightKg).toBe(92.9);
+  });
+
   it('rejects zero reps-style invalid weight', () => {
     const r = validateLogPatch({ weight_kg: 10 });
     expect(r.ok).toBe(false);
