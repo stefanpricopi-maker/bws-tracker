@@ -120,7 +120,10 @@ export function toDailyActivity(session: BendSession): DailyActivityTracker {
 export async function fetchBendSessionByDate(date: string): Promise<BendSession | null> {
   const res = await fetch(`/api/bend-sessions?date=${encodeURIComponent(date)}`);
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error('Failed to load Bend session');
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Nu am putut încărca sesiunea Bend');
+  }
   const data = await res.json() as { session: BendSession | null };
   return data.session ?? null;
 }

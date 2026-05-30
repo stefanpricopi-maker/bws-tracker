@@ -4,8 +4,16 @@ import { db } from '../../db';
 import { bendSessions } from '../../db/schema';
 import { and, eq, desc, gte } from 'drizzle-orm';
 import type { BendSession, StretchPoseLog } from '../../bend/types';
+import { ensureBendSchema } from '../../bend/ensureBendSchema';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+function apiError(message: string, status = 500) {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: JSON_HEADERS,
+  });
+}
 
 function isStretchPoseLog(v: unknown): v is StretchPoseLog {
   if (typeof v !== 'object' || v === null) return false;
@@ -65,7 +73,10 @@ export const GET: APIRoute = async ({ request, url }) => {
   if (auth instanceof Response) return auth;
   const { userId } = auth;
 
-  const id = url.searchParams.get('id');
+  try {
+    await ensureBendSchema();
+
+    const id = url.searchParams.get('id');
   if (id) {
     const [row] = await db
       .select()
@@ -116,6 +127,10 @@ export const GET: APIRoute = async ({ request, url }) => {
     status: 400,
     headers: JSON_HEADERS,
   });
+  } catch (err) {
+    console.error('GET /api/bend-sessions error:', err);
+    return apiError('Bend session load failed.');
+  }
 };
 
 // POST /api/bend-sessions — upsert session for date
@@ -123,6 +138,9 @@ export const POST: APIRoute = async ({ request }) => {
   const auth = await requireUser(request);
   if (auth instanceof Response) return auth;
   const { userId } = auth;
+
+  try {
+    await ensureBendSchema();
 
   let body: { session?: unknown };
   try {
@@ -182,6 +200,10 @@ export const POST: APIRoute = async ({ request }) => {
     status: 200,
     headers: JSON_HEADERS,
   });
+  } catch (err) {
+    console.error('POST /api/bend-sessions error:', err);
+    return apiError('Bend session save failed.');
+  }
 };
 
 // DELETE /api/bend-sessions?id=uuid
@@ -189,6 +211,9 @@ export const DELETE: APIRoute = async ({ request, url }) => {
   const auth = await requireUser(request);
   if (auth instanceof Response) return auth;
   const { userId } = auth;
+
+  try {
+    await ensureBendSchema();
 
   const id = url.searchParams.get('id');
   if (!id) {
@@ -206,4 +231,8 @@ export const DELETE: APIRoute = async ({ request, url }) => {
     status: 200,
     headers: JSON_HEADERS,
   });
+  } catch (err) {
+    console.error('DELETE /api/bend-sessions error:', err);
+    return apiError('Bend session delete failed.');
+  }
 };
