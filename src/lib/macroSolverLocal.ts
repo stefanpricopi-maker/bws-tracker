@@ -2,7 +2,7 @@
  * Daily meal plan from curated recipes + catalog nutrition data.
  */
 
-import { MEAL_LABELS, MEAL_SLOTS, type MealMacros, type MealSlot } from './mealIntake';
+import { MEAL_LABELS, MEAL_SLOTS, normalizeMealMacros, type MealMacros, type MealSlot } from './mealIntake';
 import type { FoodAmountUnit } from './foodNutrition';
 import {
   missingFoodLabelsForSlot,
@@ -37,8 +37,20 @@ export interface MealPlan {
   daily_totals: MealMacros;
 }
 
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
+
+function sumIngredientMacros(meals: MealPlanMeal[]): MealMacros {
+  return normalizeMealMacros(meals.reduce(
+    (acc, meal) => {
+      for (const ing of meal.ingredients) {
+        acc.calories += ing.calories;
+        acc.protein  += ing.protein;
+        acc.carbs    += ing.carbs;
+        acc.fat      += ing.fat;
+      }
+      return acc;
+    },
+    { calories: 0, protein: 0, carbs: 0, fat: 0 },
+  ));
 }
 
 function buildMealFromRecipe(slot: MealSlot, recipe: MealRecipeDef): MealPlanMeal {
@@ -93,26 +105,8 @@ export function generateMealPlanFromCatalog(
 
   const meals = recipes.map((recipe) => buildMealFromRecipe(recipe.slot, recipe));
 
-  const daily_totals = meals.reduce(
-    (acc, meal) => {
-      for (const ing of meal.ingredients) {
-        acc.calories += ing.calories;
-        acc.protein  += ing.protein;
-        acc.carbs    += ing.carbs;
-        acc.fat      += ing.fat;
-      }
-      return acc;
-    },
-    { calories: 0, protein: 0, carbs: 0, fat: 0 },
-  );
-
   return {
     meals,
-    daily_totals: {
-      calories: Math.round(daily_totals.calories),
-      protein:  round1(daily_totals.protein),
-      carbs:    round1(daily_totals.carbs),
-      fat:      round1(daily_totals.fat),
-    },
+    daily_totals: sumIngredientMacros(meals),
   };
 }

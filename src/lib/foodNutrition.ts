@@ -4,7 +4,7 @@
  */
 
 import { FOOD_CATALOG, type FoodCategory } from './foodCatalog';
-import type { MealMacros } from './mealIntake';
+import { normalizeMealMacros, type MealMacros } from './mealIntake';
 
 export interface FoodNutritionEntry {
   id:       string;
@@ -211,12 +211,7 @@ export function sumFoodMacros(items: MealMacros[]): MealMacros {
     }),
     { calories: 0, protein: 0, carbs: 0, fat: 0 },
   );
-  return {
-    calories: Math.round(total.calories),
-    protein:  Math.round(total.protein  * 10) / 10,
-    carbs:    Math.round(total.carbs    * 10) / 10,
-    fat:      Math.round(total.fat      * 10) / 10,
-  };
+  return normalizeMealMacros(total);
 }
 
 export function formatFoodLine(

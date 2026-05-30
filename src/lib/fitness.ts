@@ -333,6 +333,17 @@ export function calcStreak(days: { status: DayStatus }[]): number {
 
 // ── Active Burn Eat-Back ──────────────────────────────────────────────────────
 
+/** Active burn ≈ total expended minus BMR accrued so far today (Google Fit merge includes BMR). */
+export function deriveActiveCalories(
+  totalExpended: number,
+  dailyBmr: number,
+  dayProgress: number,
+): number {
+  const progress = Math.min(1, Math.max(0, dayProgress));
+  const bmrSoFar = dailyBmr * progress;
+  return Math.max(0, Math.round(totalExpended - bmrSoFar));
+}
+
 export interface EatBackResult {
   eatBack:        number;   // kcal to add above base target
   adjustedTarget: number;   // base + eatBack

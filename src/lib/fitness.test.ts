@@ -14,6 +14,7 @@ import {
   caloriesAtDeficitPercent,
   calcStreak,
   calcEatBack,
+  deriveActiveCalories,
   formatActivitySyncBanner,
   selectCoachRule,
   roundTo2_5,
@@ -364,6 +365,19 @@ describe('calcStreak', () => {
       { status: 'empty'  as const },
     ];
     expect(calcStreak(days)).toBe(0);
+  });
+});
+
+// ── deriveActiveCalories ──────────────────────────────────────────────────────
+
+describe('deriveActiveCalories', () => {
+  it('subtracts BMR accrued so far from total expended', () => {
+    expect(deriveActiveCalories(1200, 2000, 0.5)).toBe(200);
+    expect(deriveActiveCalories(800, 2000, 0.5)).toBe(0);
+  });
+
+  it('at end of day approximates activity-only burn', () => {
+    expect(deriveActiveCalories(2800, 2000, 1)).toBe(800);
   });
 });
 

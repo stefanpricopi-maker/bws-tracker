@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { MealFormFields, MealSlot } from '../lib/mealIntake';
-import { macrosFromForm } from '../lib/mealIntake';
+import { formatMacroGrams, macrosFromForm } from '../lib/mealIntake';
 import MealFoodPicker from './MealFoodPicker';
 
 function caloriesFromMacros(protein: number, carbs: number, fat: number): number {
@@ -69,7 +69,7 @@ export default function MealIntakeSection({
         </span>
         <span className="text-[11px] tabular-nums text-gray-400">
           {sub.calories > 0 || sub.protein > 0
-            ? `${sub.calories} kcal · ${sub.protein}g P${slotCalorieTarget ? ` / ~${slotCalorieTarget}` : ''}`
+            ? `${sub.calories} kcal · ${formatMacroGrams(sub.protein)}g P${slotCalorieTarget ? ` / ~${slotCalorieTarget}` : ''}`
             : slotCalorieTarget
               ? `~${slotCalorieTarget} kcal țintă`
               : '—'}

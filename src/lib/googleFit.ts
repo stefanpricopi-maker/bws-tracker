@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { deriveActiveCalories } from './fitness';
 
 const SCOPES = [
   'https://www.googleapis.com/auth/fitness.activity.read',
@@ -75,6 +76,9 @@ export async function fetchDailyMetrics(
         dataSourceId: 'derived:com.google.calories.expended:com.google.android.gms:merge_calories_expended',
       },
       {
+        dataTypeName: 'com.google.calories.bmr',
+      },
+      {
         dataTypeName: 'com.google.sleep.segment',
       },
     ],
@@ -89,7 +93,8 @@ export async function fetchDailyMetrics(
   });
 
   let steps = 0;
-  let activeCalories = 0;
+  let totalExpended = 0;
+  let dailyBmr = 0;
   let sleepMs = 0;
 
   for (const bucket of response.data.bucket ?? []) {
@@ -99,8 +104,10 @@ export async function fetchDailyMetrics(
       for (const point of dataset.point ?? []) {
         if (dataType.includes('step_count')) {
           steps += point.value?.[0]?.intVal ?? 0;
-        } else if (dataType.includes('calories')) {
-          activeCalories += point.value?.[0]?.fpVal ?? 0;
+        } else if (dataType.includes('calories.expended')) {
+          totalExpended += point.value?.[0]?.fpVal ?? 0;
+        } else if (dataType.includes('calories.bmr')) {
+          dailyBmr = Math.max(dailyBmr, point.value?.[0]?.fpVal ?? 0);
         } else if (dataType.includes('sleep')) {
           // sleep segment: value[0].intVal = sleep stage (1=awake,2=sleep,3=out-of-bed,4=light,5=deep,6=rem)
           // count any stage >= 2 as sleep time
@@ -115,9 +122,12 @@ export async function fetchDailyMetrics(
     }
   }
 
+  const dayProgress = (Date.now() - start) / Math.max(1, end - start + 1);
+  const activeCalories = deriveActiveCalories(totalExpended, dailyBmr, dayProgress);
+
   return {
     steps,
-    activeCalories: Math.round(activeCalories),
+    activeCalories,
     sleepHours: Math.round((sleepMs / 3_600_000) * 10) / 10,
   };
 }

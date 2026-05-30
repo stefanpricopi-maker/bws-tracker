@@ -14,6 +14,8 @@ import {
   MEAL_LABELS,
   EMPTY_DAY_MEALS,
   formatMacroGrams,
+  formatMacroSummary,
+  normalizeMealMacros,
   storedMealsFromForm,
   sumDayMeals,
   parseStoredDayMeals,
@@ -146,7 +148,7 @@ const EMPTY_PICKER_ITEMS = Object.fromEntries(
 ) as Record<MealSlot, MealPickerItem[]>;
 
 function planDailyTotals(meals: Meal[]): MealPlan['daily_totals'] {
-  return meals.reduce(
+  return normalizeMealMacros(meals.reduce(
     (acc, meal) => ({
       calories: acc.calories + meal.total_calories,
       protein:  acc.protein  + meal.ingredients.reduce((s, i) => s + i.protein, 0),
@@ -154,7 +156,7 @@ function planDailyTotals(meals: Meal[]): MealPlan['daily_totals'] {
       fat:      acc.fat      + meal.ingredients.reduce((s, i) => s + i.fat, 0),
     }),
     { calories: 0, protein: 0, carbs: 0, fat: 0 },
-  );
+  ));
 }
 
 interface DietTrackerProps {
@@ -295,9 +297,9 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
         const f = meal.ingredients.reduce((s, i) => s + i.fat, 0);
         nextForm[slot] = {
           calories: String(Math.round(meal.total_calories)),
-          protein:  String(Math.round(p)),
-          carbs:    String(Math.round(c)),
-          fat:      String(Math.round(f)),
+          protein:  p > 0 ? formatMacroGrams(p) : '',
+          carbs:    c > 0 ? formatMacroGrams(c) : '',
+          fat:      f > 0 ? formatMacroGrams(f) : '',
         };
       }
       await saveDayMeals(nextForm);
@@ -398,11 +400,12 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
       .catch(() => {});
   }, [targets.calories]);
 
+  // Per-meal hints = deficit plan split; daily ring uses calorieTarget (+ eat-back when active).
   const slotCalorieTargets = useMemo(
     () => Object.fromEntries(
-      MEAL_SLOTS.map((s) => [s, Math.round(calorieTarget * MEAL_CAL_SHARE[s])]),
+      MEAL_SLOTS.map((s) => [s, Math.round(targets.calories * MEAL_CAL_SHARE[s])]),
     ) as Record<MealSlot, number>,
-    [calorieTarget],
+    [targets.calories],
   );
 
   // Auto-save after meal edits (debounced)
@@ -470,10 +473,10 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
       setDayMeals((m) => ({
         ...m,
         [scanMeal]: {
-          calories: macros.calories > 0 ? String(macros.calories) : '',
-          protein:  macros.protein  > 0 ? String(macros.protein)  : '',
-          carbs:    macros.carbs    > 0 ? String(macros.carbs)    : '',
-          fat:      macros.fat      > 0 ? String(macros.fat)      : '',
+          calories: macros.calories > 0 ? String(Math.round(macros.calories)) : '',
+          protein:  macros.protein  > 0 ? formatMacroGrams(macros.protein)  : '',
+          carbs:    macros.carbs    > 0 ? formatMacroGrams(macros.carbs)    : '',
+          fat:      macros.fat      > 0 ? formatMacroGrams(macros.fat)      : '',
         },
       }));
       setScanStatus('ok');
@@ -588,9 +591,19 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
 
       {/* ── Logare mese ────────────────────────────────────────────── */}
       <div className="flex flex-col gap-3">
-        <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
-          Ce ai mâncat azi
-        </span>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
+            Ce ai mâncat azi
+          </span>
+          <p className="text-[10px] text-gray-500 leading-snug">
+            Ținte per masă din planul deficit ({targets.calories} kcal/zi)
+            {eatBackKcal > 0 && (
+              <span className="text-amber-400/90">
+                {' '}· total zi cu mișcare: {calorieTarget} kcal (+{eatBackKcal})
+              </span>
+            )}
+          </p>
+        </div>
 
         <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
           {MEAL_SLOTS.map((slot) => (
@@ -674,9 +687,7 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
             <div className="flex items-center justify-between gap-3">
               <p className="text-[11px] text-gray-500 tabular-nums">
                 Total zi:{' '}
-                <span className="text-white font-semibold">{dayPreview.calories} kcal</span>
-                {' · '}
-                {dayPreview.protein}g P · {dayPreview.carbs}g C · {dayPreview.fat}g F
+                <span className="text-white font-semibold">{formatMacroSummary(dayPreview)}</span>
               </p>
               {autoSaveStatus === 'saving' && (
                 <span className="text-[11px] text-gray-400 shrink-0">Se salvează…</span>
@@ -756,8 +767,7 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
             <div>
               <p className="text-sm font-bold text-emerald-300">🧮 Plan alimentar</p>
               <p className="text-[11px] text-emerald-400/60 mt-0.5">
-                {mealPlan.daily_totals.calories} kcal · {mealPlan.daily_totals.protein}g P ·{' '}
-                {mealPlan.daily_totals.carbs}g C · {mealPlan.daily_totals.fat}g F
+                {formatMacroSummary(mealPlan.daily_totals)}
               </p>
             </div>
             <button
@@ -813,9 +823,9 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
                     >
                       <span className="text-gray-200 truncate pr-1">{ing.item}</span>
                       <span className="text-right font-bold text-white tabular-nums">{ing.amount_g}g</span>
-                      <span className="text-right text-blue-300 tabular-nums">{ing.protein}</span>
-                      <span className="text-right text-amber-300 tabular-nums">{ing.carbs}</span>
-                      <span className="text-right text-rose-300 tabular-nums">{ing.fat}</span>
+                      <span className="text-right text-blue-300 tabular-nums">{formatMacroGrams(ing.protein)}</span>
+                      <span className="text-right text-amber-300 tabular-nums">{formatMacroGrams(ing.carbs)}</span>
+                      <span className="text-right text-rose-300 tabular-nums">{formatMacroGrams(ing.fat)}</span>
                       <span className="text-right text-gray-400 tabular-nums">{ing.calories}</span>
                     </div>
                   ))}

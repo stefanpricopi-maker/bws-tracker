@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   formatMacroGrams,
+  formatMacroSummary,
+  normalizeMealMacros,
   sumDayMeals,
   storedMealsFromForm,
   parseStoredDayMeals,
@@ -14,6 +16,29 @@ describe('mealIntake', () => {
     expect(formatMacroGrams(88.69999999999999)).toBe('88.7');
     expect(formatMacroGrams(38.3)).toBe('38.3');
     expect(formatMacroGrams(180)).toBe('180');
+    expect(formatMacroGrams(121.29999999999998)).toBe('121.3');
+  });
+
+  it('formatMacroSummary avoids float noise in UI copy', () => {
+    expect(formatMacroSummary({
+      calories: 1599,
+      protein:  113.6,
+      carbs:    121.29999999999998,
+      fat:      72.8,
+    })).toBe('1599 kcal · 113.6g P · 121.3g C · 72.8g F');
+  });
+
+  it('sums meals without float noise', () => {
+    const stored = storedMealsFromForm({
+      ...EMPTY_DAY_MEALS,
+      breakfast: { calories: '400', protein: '30.1', carbs: '40.4', fat: '10' },
+      lunch:     { calories: '500', protein: '35.2', carbs: '45.3', fat: '12' },
+      snacks:    { calories: '350', protein: '15', carbs: '30.2', fat: '12' },
+      dinner:    { calories: '450', protein: '35.3', carbs: '40.4', fat: '10' },
+    });
+    const total = sumDayMeals(stored);
+    expect(formatMacroGrams(total.carbs)).toBe('156.3');
+    expect(formatMacroGrams(total.protein)).toBe('115.6');
   });
 
   it('sums meals for daily totals', () => {

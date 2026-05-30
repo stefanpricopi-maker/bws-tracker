@@ -46,21 +46,39 @@ export const MEAL_LABELS: Record<MealSlot, string> = {
 };
 
 export function formatMacroGrams(value: number): string {
-  const rounded = Math.round(value * 10) / 10;
+  const rounded = roundMacroGrams(value);
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
-export function macrosFromForm(f: MealFormFields): MealMacros {
+export function roundMacroGrams(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+export function normalizeMealMacros(m: MealMacros): MealMacros {
   return {
-    calories: Math.round(Number(f.calories) || 0),
-    protein:  Math.round((Number(f.protein) || 0) * 10) / 10,
-    carbs:    Math.round((Number(f.carbs) || 0) * 10) / 10,
-    fat:      Math.round((Number(f.fat) || 0) * 10) / 10,
+    calories: Math.round(m.calories),
+    protein:  roundMacroGrams(m.protein),
+    carbs:    roundMacroGrams(m.carbs),
+    fat:      roundMacroGrams(m.fat),
   };
 }
 
+export function formatMacroSummary(m: MealMacros): string {
+  const n = normalizeMealMacros(m);
+  return `${n.calories} kcal · ${formatMacroGrams(n.protein)}g P · ${formatMacroGrams(n.carbs)}g C · ${formatMacroGrams(n.fat)}g F`;
+}
+
+export function macrosFromForm(f: MealFormFields): MealMacros {
+  return normalizeMealMacros({
+    calories: Number(f.calories) || 0,
+    protein:  Number(f.protein)  || 0,
+    carbs:    Number(f.carbs)    || 0,
+    fat:      Number(f.fat)      || 0,
+  });
+}
+
 export function sumDayMeals(meals: StoredDayMeals): MealMacros {
-  return MEAL_SLOTS.reduce(
+  const total = MEAL_SLOTS.reduce(
     (acc, slot) => ({
       calories: acc.calories + meals[slot].calories,
       protein:  acc.protein  + meals[slot].protein,
@@ -69,6 +87,7 @@ export function sumDayMeals(meals: StoredDayMeals): MealMacros {
     }),
     { calories: 0, protein: 0, carbs: 0, fat: 0 },
   );
+  return normalizeMealMacros(total);
 }
 
 export function storedMealsFromForm(form: DayMealsForm): StoredDayMeals {
@@ -79,10 +98,10 @@ export function storedMealsFromForm(form: DayMealsForm): StoredDayMeals {
 
 export function dayMealsFormFromStored(stored: StoredDayMeals): DayMealsForm {
   const toFields = (m: MealMacros): MealFormFields => ({
-    calories: m.calories > 0 ? String(m.calories) : '',
-    protein:  m.protein  > 0 ? String(m.protein)  : '',
-    carbs:    m.carbs    > 0 ? String(m.carbs)    : '',
-    fat:      m.fat      > 0 ? String(m.fat)      : '',
+    calories: m.calories > 0 ? String(Math.round(m.calories)) : '',
+    protein:  m.protein  > 0 ? formatMacroGrams(m.protein)  : '',
+    carbs:    m.carbs    > 0 ? formatMacroGrams(m.carbs)    : '',
+    fat:      m.fat      > 0 ? formatMacroGrams(m.fat)      : '',
   });
   return Object.fromEntries(
     MEAL_SLOTS.map((slot) => [slot, toFields(stored[slot])]),
@@ -94,10 +113,10 @@ export function dayMealsFormFromDailyTotals(totals: MealMacros): DayMealsForm {
   const form = { ...EMPTY_DAY_MEALS };
   if (totals.calories > 0 || totals.protein > 0 || totals.carbs > 0 || totals.fat > 0) {
     form.breakfast = {
-      calories: totals.calories > 0 ? String(totals.calories) : '',
-      protein:  totals.protein  > 0 ? String(totals.protein)  : '',
-      carbs:    totals.carbs    > 0 ? String(totals.carbs)    : '',
-      fat:      totals.fat      > 0 ? String(totals.fat)      : '',
+      calories: totals.calories > 0 ? String(Math.round(totals.calories)) : '',
+      protein:  totals.protein  > 0 ? formatMacroGrams(totals.protein)  : '',
+      carbs:    totals.carbs    > 0 ? formatMacroGrams(totals.carbs)    : '',
+      fat:      totals.fat      > 0 ? formatMacroGrams(totals.fat)      : '',
     };
   }
   return form;
@@ -110,12 +129,12 @@ export function parseStoredDayMeals(raw: unknown): StoredDayMeals | null {
     const m = (raw as Record<string, unknown>)[slot];
     if (m == null || typeof m !== 'object') continue;
     const row = m as Record<string, unknown>;
-    out[slot] = {
-      calories: Math.round(Number(row.calories) || 0),
-      protein:  Math.round((Number(row.protein) || 0) * 10) / 10,
-      carbs:    Math.round((Number(row.carbs) || 0) * 10) / 10,
-      fat:      Math.round((Number(row.fat) || 0) * 10) / 10,
-    };
+    out[slot] = normalizeMealMacros({
+      calories: Number(row.calories) || 0,
+      protein:  Number(row.protein)  || 0,
+      carbs:    Number(row.carbs)    || 0,
+      fat:      Number(row.fat)      || 0,
+    });
   }
   const total = sumDayMeals(out);
   if (total.calories === 0 && total.protein === 0 && total.carbs === 0 && total.fat === 0) {
