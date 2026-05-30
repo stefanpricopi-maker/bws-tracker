@@ -8,11 +8,28 @@ import { eq, sql, and, type SQL } from 'drizzle-orm';
 const VALID_CATEGORIES = ['Push', 'Pull', 'Legs', 'Abs', 'Upper', 'Full Body'] as const;
 
 const ABS_DEFAULT_EXERCISES: Array<{ name: string; targetMuscle: string; category: string }> = [
-  { name: 'Plank',                    targetMuscle: 'Core',    category: 'Abs' },
-  { name: 'Dead Bug',                 targetMuscle: 'Core',    category: 'Abs' },
+  { name: 'Plank',                    targetMuscle: 'Core',     category: 'Abs' },
+  { name: 'Dead Bug',                 targetMuscle: 'Core',     category: 'Abs' },
   { name: 'Dumbbell Russian Twist',   targetMuscle: 'Obliques', category: 'Abs' },
-  { name: 'Banded Pallof Press',      targetMuscle: 'Core',    category: 'Abs' },
-  { name: 'Hollow Body Hold',         targetMuscle: 'Core',    category: 'Abs' },
+  { name: 'Banded Pallof Press',      targetMuscle: 'Core',     category: 'Abs' },
+  { name: 'Hollow Body Hold',         targetMuscle: 'Core',     category: 'Abs' },
+];
+
+const UPPER_DEFAULT_EXERCISES: Array<{ name: string; targetMuscle: string; category: string }> = [
+  { name: 'Dumbbell Arnold Press',        targetMuscle: 'Shoulders', category: 'Upper' },
+  { name: 'Renegade Row',                 targetMuscle: 'Back',      category: 'Upper' },
+  { name: 'Overhead Triceps Extension',   targetMuscle: 'Triceps',   category: 'Upper' },
+  { name: 'Zottman Curl',                 targetMuscle: 'Biceps',    category: 'Upper' },
+  { name: 'Incline Push-ups',             targetMuscle: 'Chest',     category: 'Upper' },
+  { name: 'Banded Upright Row',           targetMuscle: 'Shoulders', category: 'Upper' },
+];
+
+const FULL_BODY_DEFAULT_EXERCISES: Array<{ name: string; targetMuscle: string; category: string }> = [
+  { name: 'Dumbbell Thruster',      targetMuscle: 'Full Body', category: 'Full Body' },
+  { name: 'Dumbbell Clean and Press', targetMuscle: 'Full Body', category: 'Full Body' },
+  { name: 'Burpees',                targetMuscle: 'Full Body', category: 'Full Body' },
+  { name: 'Dumbbell Devil Press',   targetMuscle: 'Full Body', category: 'Full Body' },
+  { name: 'Mountain Climbers',      targetMuscle: 'Full Body', category: 'Full Body' },
 ];
 
 const DEFAULT_EXERCISES: Array<{ name: string; targetMuscle: string; category: string }> = [
@@ -39,6 +56,8 @@ const DEFAULT_EXERCISES: Array<{ name: string; targetMuscle: string; category: s
   { name: 'Banded Lying Leg Curls',     targetMuscle: 'Hamstrings',  category: 'Legs' },
   { name: 'Single-Leg Calf Raises',     targetMuscle: 'Calves',      category: 'Legs' },
   ...ABS_DEFAULT_EXERCISES,
+  ...UPPER_DEFAULT_EXERCISES,
+  ...FULL_BODY_DEFAULT_EXERCISES,
 ];
 
 async function ensureSeeded() {
@@ -50,9 +69,11 @@ async function ensureSeeded() {
   }
 }
 
-/** Backfill default abs exercises for DBs seeded before Abs category existed. */
-async function ensureAbsSeeded() {
-  for (const e of ABS_DEFAULT_EXERCISES) {
+/** Backfill default exercises for DBs seeded before a category existed. */
+async function ensureDefaultsSeeded(
+  defaults: Array<{ name: string; targetMuscle: string; category: string }>,
+) {
+  for (const e of defaults) {
     const row = await db
       .select({ id: exercises.id })
       .from(exercises)
@@ -71,7 +92,9 @@ export const GET: APIRoute = async ({ request, url }) => {
 
   try {
     await ensureSeeded();
-    await ensureAbsSeeded();
+    await ensureDefaultsSeeded(ABS_DEFAULT_EXERCISES);
+    await ensureDefaultsSeeded(UPPER_DEFAULT_EXERCISES);
+    await ensureDefaultsSeeded(FULL_BODY_DEFAULT_EXERCISES);
     const limit  = Math.min(Math.max(1, Number(url.searchParams.get('limit')) || 200), 500);
     const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
     const categoryParam = url.searchParams.get('category')?.trim() ?? '';

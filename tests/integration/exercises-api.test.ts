@@ -30,7 +30,7 @@ describe('/api/exercises', () => {
       offset: number;
     }>(res);
     expect(body.exercises).toHaveLength(2);
-    expect(body.total).toBe(10); // 5 fixtures + 5 default Abs backfill on GET
+    expect(body.total).toBe(21); // 5 fixtures + 16 default backfill on GET
     expect(body.limit).toBe(2);
     expect(body.offset).toBe(0);
   });

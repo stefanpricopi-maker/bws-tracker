@@ -5,6 +5,7 @@ import StepTracker          from './StepTracker';
 import WorkoutLogger        from './WorkoutLogger';
 import BWSScore             from './BWSScore';
 import ProfileSettings      from './ProfileSettings';
+import ProfileMealPreferences from './ProfileMealPreferences';
 import AlertBanner          from './AlertBanner';
 import WeeklySummary        from './WeeklySummary';
 import ConsistencyHeatmap   from './ConsistencyHeatmap';
@@ -85,27 +86,37 @@ function StatsTab() {
 
 // ── Profile tab (settings + progress photos) ──────────────────────────────
 
+type ProfileSubTab = 'settings' | 'mealPlan' | 'photos';
+
 interface ProfileTabProps {
   onReplayOnboarding: () => void;
+  sub: ProfileSubTab;
+  onSubChange: (sub: ProfileSubTab) => void;
 }
 
-function ProfileTab({ onReplayOnboarding }: ProfileTabProps) {
-  const [sub, setSub] = useState<'settings' | 'photos'>('settings');
+function ProfileTab({ onReplayOnboarding, sub, onSubChange }: ProfileTabProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex rounded-xl bg-gray-800 border border-gray-700 p-1 gap-1">
-        {(['settings', 'photos'] as const).map((s) => (
+        {([
+          { id: 'settings' as const, label: '⚙️ Setări' },
+          { id: 'mealPlan' as const, label: '🥗 Plan AI' },
+          { id: 'photos' as const, label: '📸 Poze' },
+        ]).map(({ id, label }) => (
           <button
-            key={s}
-            onClick={() => setSub(s)}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors
-              ${sub === s ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+            key={id}
+            type="button"
+            data-testid={`profile-sub-${id}`}
+            onClick={() => onSubChange(id)}
+            className={`flex-1 py-2 text-[11px] font-semibold rounded-lg transition-colors leading-tight
+              ${sub === id ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
           >
-            {s === 'settings' ? '⚙️ Settings' : '📸 Progress Photos'}
+            {label}
           </button>
         ))}
       </div>
       {sub === 'settings' && <ProfileSettings onReplayOnboarding={onReplayOnboarding} />}
+      {sub === 'mealPlan' && <ProfileMealPreferences />}
       {sub === 'photos'   && <PhotoVault />}
     </div>
   );
@@ -138,6 +149,7 @@ export default function Dashboard() {
   const [googleAuthMsg, setGoogleAuthMsg] = useState<{ text: string; color: string } | null>(null);
   const [player, setPlayer]         = useState<PlayerState | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [profileSub, setProfileSub] = useState<ProfileSubTab>('settings');
 
   function startPlayer(exercises: PlannedExercise[], dayType: string) {
     setPlayer({ exercises, dayType });
@@ -255,10 +267,21 @@ export default function Dashboard() {
             <WorkoutTab />
           </div>
         )}
-        {active === 'diet'      && <DietTracker onOpenProfile={() => setActive('profile')} />}
+        {active === 'diet'      && (
+          <DietTracker
+            onOpenProfile={() => {
+              setProfileSub('mealPlan');
+              setActive('profile');
+            }}
+          />
+        )}
         {active === 'stats'     && <StatsTab />}
         {active === 'profile'   && (
-          <ProfileTab onReplayOnboarding={() => setShowOnboarding(true)} />
+          <ProfileTab
+            onReplayOnboarding={() => setShowOnboarding(true)}
+            sub={profileSub}
+            onSubChange={setProfileSub}
+          />
         )}
       </div>
       </WorkoutPlayerProvider>

@@ -3,8 +3,6 @@ import { clearOnboarding } from './Onboarding';
 import { proteinGramsForWeight, macrosFromCaloriesAndProtein } from '../lib/macroTargets';
 import { calculateTdeeFromWeight } from '../lib/tdee';
 import AppPreferences from './AppPreferences';
-import MealFoodPreferences from './MealFoodPreferences';
-import { defaultMealPreferences, type MealPreferences } from '../lib/mealPreferences';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -17,7 +15,6 @@ interface GoalsData {
   targetCarbsG: number | null;
   targetFatG: number | null;
   targetSteps: number | null;
-  mealPreferences?: MealPreferences;
 }
 
 interface ProfileData {
@@ -113,7 +110,6 @@ export default function ProfileSettings({ onReplayOnboarding }: ProfileSettingsP
   const [targetCarbs, setTargetCarbs] = useState('113');
   const [targetFat, setTargetFat] = useState('75');
   const [targetSteps, setTargetSteps] = useState('10000');
-  const [mealPreferences, setMealPreferences] = useState<MealPreferences>(defaultMealPreferences());
 
   // TDEE calculator
   const [calcWeight, setCalcWeight] = useState('');
@@ -138,9 +134,6 @@ export default function ProfileSettings({ onReplayOnboarding }: ProfileSettingsP
           setTargetCarbs(d.goals.targetCarbsG != null ? String(d.goals.targetCarbsG) : '113');
           setTargetFat(d.goals.targetFatG != null ? String(d.goals.targetFatG) : '75');
           setTargetSteps(d.goals.targetSteps != null ? String(d.goals.targetSteps) : '10000');
-          if (d.goals.mealPreferences) {
-            setMealPreferences(d.goals.mealPreferences);
-          }
         }
       })
       .catch(() => {})
@@ -185,7 +178,6 @@ export default function ProfileSettings({ onReplayOnboarding }: ProfileSettingsP
           targetCarbsG: parseInt(targetCarbs, 10) || 113,
           targetFatG: parseInt(targetFat, 10) || 75,
           targetSteps: parseInt(targetSteps, 10) || 10000,
-          mealPreferences,
         }),
       });
 
@@ -332,15 +324,7 @@ export default function ProfileSettings({ onReplayOnboarding }: ProfileSettingsP
           </div>
         </SectionCard>
 
-        {/* 4 — Meal plan food preferences */}
-        <MealFoodPreferences
-          preferences={mealPreferences}
-          onChange={setMealPreferences}
-          hideSaveButton
-          listMaxHeightClass="max-h-80"
-        />
-
-        {/* 5 — TDEE Calculator */}
+        {/* 4 — TDEE Calculator */}
         <SectionCard title="TDEE Calculator (Mifflin-St Jeor)">
           <div className="flex flex-col gap-4">
             <div className="grid grid-cols-2 gap-4">
@@ -424,7 +408,7 @@ export default function ProfileSettings({ onReplayOnboarding }: ProfileSettingsP
           disabled={saving}
           className="bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white font-semibold rounded-xl px-6 py-3 w-full transition-colors"
         >
-          {saving ? 'Saving…' : 'Save Goals & Preferences'}
+          {saving ? 'Saving…' : 'Save Goals'}
         </button>
 
         <AppPreferences />

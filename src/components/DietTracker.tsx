@@ -254,7 +254,7 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
 
   async function handleSolveMacros() {
     if (!canGenerateMealPlan(mealPreferences.allowedIds)) {
-      setSolveError(`Selectează cel puțin ${MIN_ALLOWED_FOODS} alimente în Profile → Settings.`);
+      setSolveError(`Selectează cel puțin ${MIN_ALLOWED_FOODS} alimente în Profile → Plan AI.`);
       return;
     }
     setSolving(true);
@@ -740,7 +740,7 @@ export default function DietTracker({ onOpenProfile }: DietTrackerProps) {
               {' '}pentru a alege alimentele din plan.
             </>
           ) : (
-            'Alege alimentele din Profile → Settings.'
+            'Alege alimentele din Profile → Plan AI.'
           )}
         </p>
       )}
