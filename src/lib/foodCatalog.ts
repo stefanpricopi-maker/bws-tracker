@@ -44,6 +44,7 @@ export const FOOD_CATALOG: FoodItem[] = [
   { id: 'telemea', label: 'Telemea', category: 'dairy' },
   { id: 'mozzarella', label: 'Mozzarella', category: 'dairy' },
   { id: 'milk_skim', label: 'Lapte degresat', category: 'dairy' },
+  { id: 'milk_whole', label: 'Lapte integral', category: 'dairy' },
   // carbs
   { id: 'rice_white', label: 'Orez alb', category: 'carbs' },
   { id: 'rice_brown', label: 'Orez brun', category: 'carbs' },
@@ -76,6 +77,7 @@ export const FOOD_CATALOG: FoodItem[] = [
   // snacks
   { id: 'protein_bar', label: 'Bară proteică', category: 'snacks' },
   { id: 'banana', label: 'Banane', category: 'snacks' },
+  { id: 'dates', label: 'Curmale', category: 'snacks' },
   { id: 'apple', label: 'Mere', category: 'snacks' },
   { id: 'berries', label: 'Fructe de pădure', category: 'snacks' },
   { id: 'hummus', label: 'Humus', category: 'snacks' },

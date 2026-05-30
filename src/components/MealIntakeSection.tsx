@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { MealFormFields, MealSlot } from '../lib/mealIntake';
 import { macrosFromForm } from '../lib/mealIntake';
-import { mealMacrosToFormFields } from '../lib/mealMacrosAi';
+import MealFoodPicker from './MealFoodPicker';
 
 function caloriesFromMacros(protein: number, carbs: number, fat: number): number {
   return Math.round(protein * 4 + carbs * 4 + fat * 9);
@@ -24,10 +24,7 @@ export default function MealIntakeSection({
   onChange,
   defaultExpanded = true,
 }: MealIntakeSectionProps) {
-  const [description, setDescription] = useState('');
-  const [estimating, setEstimating] = useState(false);
-  const [estimateError, setEstimateError] = useState<string | null>(null);
-  const [estimateOk, setEstimateOk] = useState(false);
+  const [manualEdit, setManualEdit] = useState(false);
 
   const sub = macrosFromForm(fields);
   const computedCal = caloriesFromMacros(
@@ -37,6 +34,7 @@ export default function MealIntakeSection({
   );
 
   function updateMacro(key: 'protein' | 'carbs' | 'fat', value: string) {
+    setManualEdit(true);
     const next = { ...fields, [key]: value };
     const p = Number(next.protein) || 0;
     const c = Number(next.carbs) || 0;
@@ -47,41 +45,9 @@ export default function MealIntakeSection({
     onChange(next);
   }
 
-  async function handleEstimate() {
-    const text = description.trim();
-    if (text.length < 3) {
-      setEstimateError('Scrie ce ai mâncat (min. 3 caractere).');
-      return;
-    }
-    setEstimating(true);
-    setEstimateError(null);
-    setEstimateOk(false);
-    try {
-      const res = await fetch('/api/meal-estimate', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ description: text, meal: label }),
-      });
-      const data = await res.json().catch(() => ({})) as {
-        error?: string;
-        calories?: number;
-        protein?: number;
-        carbs?: number;
-        fat?: number;
-      };
-      if (!res.ok) throw new Error(data.error ?? 'Estimare eșuată');
-      onChange(mealMacrosToFormFields({
-        calories: data.calories ?? 0,
-        protein:  data.protein  ?? 0,
-        carbs:    data.carbs    ?? 0,
-        fat:      data.fat      ?? 0,
-      }));
-      setEstimateOk(true);
-    } catch (err) {
-      setEstimateError(err instanceof Error ? err.message : 'Estimare eșuată');
-    } finally {
-      setEstimating(false);
-    }
+  function handlePickerChange(next: MealFormFields) {
+    setManualEdit(false);
+    onChange(next);
   }
 
   return (
@@ -103,41 +69,11 @@ export default function MealIntakeSection({
       </summary>
 
       <div className="px-3 pb-3 pt-0 flex flex-col gap-2 border-t border-gray-700/50">
-        <div className="flex flex-col gap-1.5 pt-2">
-          <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-            Ce ai mâncat
-          </label>
-          <textarea
-            value={description}
-            onChange={(e) => {
-              setDescription(e.target.value);
-              setEstimateError(null);
-              setEstimateOk(false);
-            }}
-            rows={2}
-            maxLength={500}
-            placeholder="ex. 2 ouă, o felie pâine, iaurt grecesc…"
-            className="w-full rounded-xl bg-gray-800 border border-gray-700 px-3 py-2 text-sm text-white
-                       placeholder-gray-600 resize-none focus:outline-none focus:border-violet-500"
-            data-testid={`meal-${slot}-description`}
-          />
-          <button
-            type="button"
-            onClick={handleEstimate}
-            disabled={estimating || description.trim().length < 3}
-            className="self-start px-3 py-1.5 rounded-lg text-[11px] font-semibold
-                       bg-violet-600/25 border border-violet-500/40 text-violet-200
-                       hover:bg-violet-600/35 disabled:opacity-50 disabled:cursor-not-allowed"
-            data-testid={`meal-${slot}-estimate`}
-          >
-            {estimating ? 'Estimez…' : '✨ Estimează macro'}
-          </button>
-          {estimateOk && (
-            <p className="text-[10px] text-green-400">Macro completate — verifică și salvează ziua.</p>
-          )}
-          {estimateError && (
-            <p className="text-[10px] text-red-400">{estimateError}</p>
-          )}
+        <div className="pt-2">
+          <MealFoodPicker slot={slot} onChange={handlePickerChange} />
+          <p className="text-[10px] text-gray-500 mt-2">
+            Alege alimente din catalog — valorile sunt fixe, fără estimare AI.
+          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -163,6 +99,7 @@ export default function MealIntakeSection({
                   if (key === 'protein' || key === 'carbs' || key === 'fat') {
                     updateMacro(key, e.target.value);
                   } else {
+                    setManualEdit(true);
                     onChange({ ...fields, calories: e.target.value });
                   }
                 }}
@@ -171,7 +108,7 @@ export default function MealIntakeSection({
                            focus:outline-none focus:border-violet-500 transition-colors"
                 data-testid={`meal-${slot}-${key}`}
               />
-              {isCalories && computedCal > 0 && (
+              {isCalories && computedCal > 0 && !manualEdit && (
                 <p className="text-[10px] text-gray-500 px-0.5">
                   Auto: {computedCal} kcal
                 </p>
