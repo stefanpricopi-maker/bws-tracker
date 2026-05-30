@@ -14,6 +14,8 @@ interface MealIntakeSectionProps {
   fields: MealFormFields;
   onChange: (fields: MealFormFields) => void;
   defaultExpanded?: boolean;
+  pickerItems?: import('../lib/mealPlanPicker').MealPickerItem[];
+  pickerKey?: number;
 }
 
 export default function MealIntakeSection({
@@ -23,6 +25,8 @@ export default function MealIntakeSection({
   fields,
   onChange,
   defaultExpanded = true,
+  pickerItems = [],
+  pickerKey = 0,
 }: MealIntakeSectionProps) {
   const [manualEdit, setManualEdit] = useState(false);
 
@@ -70,7 +74,12 @@ export default function MealIntakeSection({
 
       <div className="px-3 pb-3 pt-0 flex flex-col gap-2 border-t border-gray-700/50">
         <div className="pt-2">
-          <MealFoodPicker slot={slot} onChange={handlePickerChange} />
+          <MealFoodPicker
+            key={`${slot}-${pickerKey}`}
+            slot={slot}
+            initialItems={pickerItems}
+            onChange={handlePickerChange}
+          />
           <p className="text-[10px] text-gray-500 mt-2">
             Alege alimente din catalog — valorile sunt fixe, fără estimare AI.
           </p>

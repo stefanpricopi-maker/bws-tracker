@@ -255,7 +255,7 @@ export default function Dashboard() {
             <WorkoutTab />
           </div>
         )}
-        {active === 'diet'      && <DietTracker />}
+        {active === 'diet'      && <DietTracker onOpenProfile={() => setActive('profile')} />}
         {active === 'stats'     && <StatsTab />}
         {active === 'profile'   && (
           <ProfileTab onReplayOnboarding={() => setShowOnboarding(true)} />

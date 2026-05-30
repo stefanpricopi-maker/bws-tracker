@@ -14,26 +14,21 @@ import {
 } from '../lib/foodNutrition';
 import { mealMacrosToFormFields } from '../lib/mealMacrosAi';
 import type { MealFormFields } from '../lib/mealIntake';
-
-interface AddedFood {
-  id:       string;
-  amount:   number;
-  unit:     FoodAmountUnit;
-  line:     string;
-}
+import type { MealPickerItem } from '../lib/mealPlanPicker';
 
 interface MealFoodPickerProps {
-  slot:     string;
-  onChange: (fields: MealFormFields) => void;
+  slot:          string;
+  onChange:      (fields: MealFormFields) => void;
+  initialItems?: MealPickerItem[];
 }
 
-export default function MealFoodPicker({ slot, onChange }: MealFoodPickerProps) {
+export default function MealFoodPicker({ slot, onChange, initialItems = [] }: MealFoodPickerProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<FoodNutritionEntry | null>(null);
   const [amount, setAmount] = useState('100');
   const [unit, setUnit] = useState<FoodAmountUnit>('g');
-  const [items, setItems] = useState<AddedFood[]>([]);
+  const [items, setItems] = useState<MealPickerItem[]>(initialItems);
   const [addError, setAddError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -50,7 +45,7 @@ export default function MealFoodPicker({ slot, onChange }: MealFoodPickerProps) 
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
-  function applyItems(next: AddedFood[]) {
+  function applyItems(next: MealPickerItem[]) {
     setItems(next);
     const macros = next
       .map((item) => macrosForFood(item.id, item.amount, item.unit))

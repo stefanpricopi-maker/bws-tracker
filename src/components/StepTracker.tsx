@@ -1,14 +1,21 @@
 import { useState, useEffect } from 'react';
+import { formatActivitySyncBanner } from '../lib/fitness';
 
 const STEP_TARGET = 10_000;
+const DEFAULT_CAL_TARGET = 1850;
 const today = () => new Date().toISOString().slice(0, 10);
+
+interface SyncResult {
+  steps: number;
+  activeCalories: number;
+}
 
 function clamp(v: number, min = 0, max = 100) {
   return Math.min(max, Math.max(min, v));
 }
 
 interface SyncButtonProps {
-  onSync: (steps: number) => void;
+  onSync: (data: SyncResult) => void;
 }
 
 function SyncButton({ onSync }: SyncButtonProps) {
@@ -22,7 +29,7 @@ function SyncButton({ onSync }: SyncButtonProps) {
     setSynced(false);
     try {
       const res = await fetch(`/api/sync/google-fit?date=${today()}`);
-      let data: { steps?: number; error?: string; message?: string } = {};
+      let data: { steps?: number; activeCalories?: number; error?: string; message?: string } = {};
       try {
         data = await res.json();
       } catch {
@@ -35,7 +42,10 @@ function SyncButton({ onSync }: SyncButtonProps) {
         }
         throw new Error(data.message ?? 'Sync failed');
       }
-      onSync(data.steps ?? 0);
+      onSync({
+        steps:          data.steps ?? 0,
+        activeCalories: data.activeCalories ?? 0,
+      });
       setSynced(true);
     } catch (err) {
       setSyncError(err instanceof Error ? err.message : 'Sync failed');
@@ -88,20 +98,34 @@ export default function StepTracker() {
   const [input,  setInput]  = useState('');
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<'idle' | 'ok' | 'err'>('idle');
+  const [calTarget, setCalTarget] = useState(DEFAULT_CAL_TARGET);
+  const [activityBanner, setActivityBanner] = useState<{ line1: string; line2: string } | null>(null);
 
-  // Load today's step count on mount
   useEffect(() => {
-    fetch('/api/logs?days=1')
-      .then((r) => r.json())
-      .then((rows: Array<{ date: string; steps: number | null }>) => {
+    Promise.all([
+      fetch('/api/logs?days=1').then((r) => r.json()),
+      fetch('/api/profile').then((r) => r.json()),
+    ])
+      .then(([rows, profile]: [
+        Array<{ date: string; steps: number | null }>,
+        { goals?: { targetCaloriesKcal?: number | null } | null },
+      ]) => {
         const row = rows.find((r) => r.date === today());
         if (row?.steps != null) {
           setSteps(row.steps);
           setInput(row.steps.toString());
         }
+        const cals = profile.goals?.targetCaloriesKcal;
+        if (cals != null && cals > 0) setCalTarget(cals);
       })
       .catch(() => {});
   }, []);
+
+  function handleWearableSync({ steps: syncedSteps, activeCalories }: SyncResult) {
+    setSteps(syncedSteps);
+    setInput(syncedSteps.toString());
+    setActivityBanner(formatActivitySyncBanner(activeCalories, syncedSteps, calTarget));
+  }
 
   const progress   = clamp(Math.round((steps / STEP_TARGET) * 100));
   const isAchieved = steps >= STEP_TARGET;
@@ -186,13 +210,23 @@ export default function StepTracker() {
         </div>
       )}
 
+      {activityBanner && (
+        <div
+          className="rounded-xl px-3 py-2.5 flex flex-col gap-0.5"
+          style={{ backgroundColor: '#1f1a0e', border: '1px solid #78350f' }}
+        >
+          <p className="text-xs font-semibold text-amber-300">{activityBanner.line1}</p>
+          <p className="text-[11px] text-amber-300/75">{activityBanner.line2}</p>
+        </div>
+      )}
+
       {/* Input form */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
             Log today's steps
           </span>
-          <SyncButton onSync={(s) => { setSteps(s); setInput(s.toString()); }} />
+          <SyncButton onSync={handleWearableSync} />
         </div>
         <div className="flex gap-2">
           <input

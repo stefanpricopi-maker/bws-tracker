@@ -14,6 +14,7 @@ import {
   caloriesAtDeficitPercent,
   calcStreak,
   calcEatBack,
+  formatActivitySyncBanner,
   selectCoachRule,
   roundTo2_5,
   calcDeloadWeight,
@@ -390,6 +391,20 @@ describe('calcEatBack', () => {
   it('rounds eat-back to nearest integer', () => {
     const r = calcEatBack(701, 1850); // 701 * 0.5 = 350.5 → 351
     expect(r.eatBack).toBe(351);
+  });
+});
+
+describe('formatActivitySyncBanner', () => {
+  it('returns short lines when burn is high enough', () => {
+    const banner = formatActivitySyncBanner(757, 2442, 2921);
+    expect(banner).toEqual({
+      line1: '757 kcal arse · 2.442 pași',
+      line2: '+379 kcal → țintă 3.300 kcal',
+    });
+  });
+
+  it('returns null below eat-back threshold', () => {
+    expect(formatActivitySyncBanner(500, 6000, 1850)).toBeNull();
   });
 });
 

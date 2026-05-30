@@ -15,9 +15,12 @@ import {
 interface MealFoodPreferencesProps {
   preferences: MealPreferences;
   onChange: (prefs: MealPreferences) => void;
-  onSave: () => void;
+  onSave?: () => void;
   saving?: boolean;
   saveStatus?: 'idle' | 'ok' | 'err';
+  /** When true, parent handles persistence (e.g. Profile Save Goals). */
+  hideSaveButton?: boolean;
+  listMaxHeightClass?: string;
 }
 
 const CATEGORY_ORDER: FoodCategory[] = [
@@ -35,6 +38,8 @@ export default function MealFoodPreferences({
   onSave,
   saving = false,
   saveStatus = 'idle',
+  hideSaveButton = false,
+  listMaxHeightClass = 'max-h-56',
 }: MealFoodPreferencesProps) {
   const { allowedIds, customFoods } = preferences;
   const [query, setQuery] = useState('');
@@ -121,7 +126,7 @@ export default function MealFoodPreferences({
       <div>
         <p className="text-sm font-bold text-white">Preferințe Plan AI</p>
         <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
-          Bifează ce vrei în plan. Adaugă alimente care nu sunt în listă.
+          Bifează ce vrei în planul alimentar. Setezi o dată, apoi generezi din Diet.
         </p>
       </div>
 
@@ -184,7 +189,7 @@ export default function MealFoodPreferences({
         </span>
       </div>
 
-      <div className="max-h-56 overflow-y-auto flex flex-col gap-3 pr-1">
+      <div className={`overflow-y-auto flex flex-col gap-3 pr-1 ${listMaxHeightClass}`}>
         {filteredCustom.length > 0 && (
           <div data-testid="meal-custom-foods">
             <p className="text-[10px] font-bold uppercase tracking-wider text-violet-400 mb-1.5">
@@ -259,23 +264,25 @@ export default function MealFoodPreferences({
         })}
       </div>
 
-      <div className="flex items-center gap-2 pt-1 border-t border-gray-700/50">
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={saving || !canGenerate}
-          className="px-3 py-2 rounded-xl text-xs font-semibold bg-gray-700 text-white
-                     hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {saving ? 'Se salvează…' : 'Salvează preferințe'}
-        </button>
-        {saveStatus === 'ok' && (
-          <span className="text-[11px] text-green-400">Salvat ✓</span>
-        )}
-        {saveStatus === 'err' && (
-          <span className="text-[11px] text-red-400">Eroare la salvare</span>
-        )}
-      </div>
+      {!hideSaveButton && (
+        <div className="flex items-center gap-2 pt-1 border-t border-gray-700/50">
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving || !canGenerate || !onSave}
+            className="px-3 py-2 rounded-xl text-xs font-semibold bg-gray-700 text-white
+                       hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Se salvează…' : 'Salvează preferințe'}
+          </button>
+          {saveStatus === 'ok' && (
+            <span className="text-[11px] text-green-400">Salvat ✓</span>
+          )}
+          {saveStatus === 'err' && (
+            <span className="text-[11px] text-red-400">Eroare la salvare</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -346,6 +346,22 @@ export function calcEatBack(activeBurn: number, baseTarget: number): EatBackResu
   return { eatBack, adjustedTarget, isHigh };
 }
 
+/** Short post-sync copy for Home — null when no eat-back hint needed. */
+export function formatActivitySyncBanner(
+  activeBurn: number,
+  steps: number,
+  baseTarget: number,
+): { line1: string; line2: string } | null {
+  const { eatBack, adjustedTarget, isHigh } = calcEatBack(activeBurn, baseTarget);
+  if (!isHigh) return null;
+
+  const fmt = (n: number) => n.toLocaleString('ro-RO');
+  return {
+    line1: `${fmt(activeBurn)} kcal arse · ${fmt(steps)} pași`,
+    line2: `+${fmt(eatBack)} kcal → țintă ${fmt(adjustedTarget)} kcal`,
+  };
+}
+
 // ── Goal Forecasting ──────────────────────────────────────────────────────────
 
 export interface ForecastInput {
