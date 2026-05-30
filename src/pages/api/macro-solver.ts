@@ -1,32 +1,21 @@
 import type { APIRoute } from 'astro';
 import { requireUser } from '../../lib/apiAuth';
-import {
-  aiJson,
-  aiNotConfiguredResponse,
-  catchAiRouteError,
-  chatCompletion,
-  getAiConfig,
-  jsonObjectFormat,
-  parseLlmJson,
-} from '../../lib/aiApi';
+import { aiJson } from '../../lib/aiApi';
 import { db } from '../../db';
 import { userGoals } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import {
-  allowedFoodLabels,
   MIN_ALLOWED_FOODS,
   canGenerateMealPlan,
   parseMealPreferencesJson,
   resolveMealPreferences,
 } from '../../lib/mealPreferences';
-import { buildMacroSolverPrompt } from '../../lib/macroSolverPrompt';
+import { generateMealPlanFromCatalog } from '../../lib/macroSolverLocal';
 
 export const GET: APIRoute = async ({ request }) => {
   const auth = await requireUser(request, 'macro-solver', 10);
   if (auth instanceof Response) return auth;
   const { userId } = auth;
-
-  if (!getAiConfig().apiKey) return aiNotConfiguredResponse();
 
   try {
     const [goals = null] = await db
@@ -47,24 +36,16 @@ export const GET: APIRoute = async ({ request }) => {
     );
     if (!canGenerateMealPlan(prefs.allowedIds)) {
       return aiJson(
-        { error: `Select at least ${MIN_ALLOWED_FOODS} foods in meal preferences before generating a plan.` },
+        { error: `Selectează cel puțin ${MIN_ALLOWED_FOODS} alimente în preferințe.` },
         400,
       );
     }
 
-    const labels = allowedFoodLabels(prefs);
-    const { baseUrl, model } = getAiConfig();
-    const raw = await chatCompletion({
-      model,
-      messages: [{ role: 'user', content: buildMacroSolverPrompt(targets, labels) }],
-      max_tokens: 1200,
-      temperature: 0.2,
-      ...jsonObjectFormat(baseUrl),
-    });
-
-    const parsed = parseLlmJson(raw, 'Macro solver did not return valid JSON.');
-    return aiJson({ plan: parsed, targets });
+    const catalogIds = prefs.allowedIds.filter((id) => !id.startsWith('custom_'));
+    const plan = generateMealPlanFromCatalog(targets, catalogIds);
+    return aiJson({ plan, targets });
   } catch (err) {
-    return catchAiRouteError(err, 'macro-solver');
+    const message = err instanceof Error ? err.message : 'Nu am putut genera planul.';
+    return aiJson({ error: message }, 422);
   }
 };

@@ -299,7 +299,13 @@ export default function DietTracker() {
       if (!saved) throw new Error('Nu am putut salva preferințele.');
       const res  = await fetch('/api/macro-solver');
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Unknown error');
+      if (!res.ok || data.error) {
+        throw new Error(
+          typeof data.error === 'string'
+            ? data.error
+            : data.detail ?? 'Nu am putut genera planul.',
+        );
+      }
       const plan = data.plan as MealPlan;
       // Guard: validate shape
       if (!plan?.meals || !Array.isArray(plan.meals)) throw new Error('Invalid meal plan structure');
@@ -507,7 +513,7 @@ export default function DietTracker() {
             Generez planul…
           </>
         ) : (
-          <>🧮 Generează plan AI</>
+          <>🧮 Generează plan alimentar</>
         )}
       </button>
 
@@ -572,22 +578,28 @@ export default function DietTracker() {
                 <span className="font-normal">{formatMacroGrams(totalG)}g total</span>
               </div>
               <div className="flex h-3 rounded-full overflow-hidden gap-px">
-                {pPct > 0 && <div className="bg-blue-500  transition-all" style={{ width: `${pPct}%` }} title={`Protein ${pPct}%`} />}
+                {pPct > 0 && <div className="bg-blue-500  transition-all" style={{ width: `${pPct}%` }} title={`Proteine ${pPct}%`} />}
                 {cPct > 0 && <div className="bg-amber-500 transition-all" style={{ width: `${cPct}%` }} title={`Carbs ${cPct}%`} />}
-                {fPct > 0 && <div className="bg-rose-500  transition-all" style={{ width: `${fPct}%` }} title={`Fat ${fPct}%`} />}
+                {fPct > 0 && <div className="bg-rose-500  transition-all" style={{ width: `${fPct}%` }} title={`Fats ${fPct}%`} />}
               </div>
-              <div className="flex gap-3 text-[10px]">
-                <span className="flex items-center gap-1 text-blue-400"><span className="w-2 h-2 rounded-sm bg-blue-500"/>P {pPct}%</span>
-                <span className="flex items-center gap-1 text-amber-400"><span className="w-2 h-2 rounded-sm bg-amber-500"/>C {cPct}%</span>
-                <span className="flex items-center gap-1 text-rose-400"><span className="w-2 h-2 rounded-sm bg-rose-500"/>F {fPct}%</span>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
+                <span className="flex items-center gap-1 text-blue-400"><span className="w-2 h-2 rounded-sm bg-blue-500"/>Proteine {pPct}%</span>
+                <span className="flex items-center gap-1 text-amber-400"><span className="w-2 h-2 rounded-sm bg-amber-500"/>Carbs {cPct}%</span>
+                <span className="flex items-center gap-1 text-rose-400"><span className="w-2 h-2 rounded-sm bg-rose-500"/>Fats {fPct}%</span>
               </div>
             </div>
           );
         })()}
 
-        <MacroBar label="Protein" consumed={logged.protein} target={targets.protein} unit="g" color="bg-blue-500" />
+        <MacroBar label="Proteine" consumed={logged.protein} target={targets.protein} unit="g" color="bg-blue-500" />
         <MacroBar label="Carbs"   consumed={logged.carbs}   target={targets.carbs}   unit="g" color="bg-amber-500" />
-        <MacroBar label="Fat"     consumed={logged.fat}     target={targets.fat}     unit="g" color="bg-rose-500" />
+        <MacroBar label="Fats"    consumed={logged.fat}     target={targets.fat}     unit="g" color="bg-rose-500" />
+
+        <p className="text-[10px] text-gray-500 leading-snug">
+          Ținta de carbs ({formatMacroGrams(targets.carbs)}g) = caloriile rămase după proteine (
+          {formatMacroGrams(targets.protein)}g) și grăsimi ({formatMacroGrams(targets.fat)}g). Ajustează în Profil
+          dacă vrei mai mulți carbohidrați.
+        </p>
 
         {/* Nothing logged yet — empty state */}
         {logged.calories === 0 && logged.protein === 0 && logged.carbs === 0 && logged.fat === 0 && (
@@ -599,7 +611,7 @@ export default function DietTracker() {
 
       {solveError && (
         <div className="rounded-xl px-4 py-3 bg-red-900/40 border border-red-500/40">
-          <p className="text-xs font-semibold text-red-400">⚠ Macro solver error</p>
+          <p className="text-xs font-semibold text-red-400">⚠ Eroare plan alimentar</p>
           <p className="text-[11px] text-red-300/70 mt-0.5">{solveError}</p>
         </div>
       )}
