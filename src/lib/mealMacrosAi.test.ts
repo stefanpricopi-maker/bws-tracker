@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   normalizeMealMacros,
   validateMealDescription,
-  buildMealEstimatePrompt,
 } from './mealMacrosAi';
 
 describe('mealMacrosAi', () => {
@@ -18,10 +17,6 @@ describe('mealMacrosAi', () => {
   it('validates description length', () => {
     expect(validateMealDescription('ab')).toBeNull();
     expect(validateMealDescription('2 ouă și pâine')).toBe('2 ouă și pâine');
-  });
-
-  it('includes meal label in prompt', () => {
-    expect(buildMealEstimatePrompt('iaurt cu nuci', 'Mic dejun')).toContain('Mic dejun');
-    expect(buildMealEstimatePrompt('iaurt cu nuci', 'Mic dejun')).toContain('iaurt cu nuci');
+    expect(validateMealDescription('200g ovăz\n5 curmale')).toBe('200g ovăz\n5 curmale');
   });
 });

@@ -67,6 +67,7 @@ See [`.env.example`](./.env.example) for the full list. Key vars:
 | `BWS_AUTH_SECRET` | Optional — enables password login (see Profile) |
 | `BWS_LOGIN_PASSWORD` | App password when auth is enabled |
 | `AI_API_KEY` | Groq / OpenAI API key |
+| `FDC_API_KEY` | USDA FoodData Central — meal macro estimate (free) |
 | `GOOGLE_CLIENT_*` | Google Fit OAuth |
 
 Staging: [docs/STAGING.md](./docs/STAGING.md)

@@ -1,4 +1,4 @@
-/** Shared meal macro estimation from AI JSON. */
+/** Shared meal macro normalization and form helpers. */
 
 export interface MealMacrosEstimate {
   calories: number;
@@ -23,23 +23,10 @@ export function normalizeMealMacros(raw: {
 
 export function validateMealDescription(text: unknown): string | null {
   if (typeof text !== 'string') return null;
-  const trimmed = text.trim().replace(/\s+/g, ' ');
+  const trimmed = text.trim();
   if (trimmed.length < 3) return null;
   if (trimmed.length > 500) return null;
   return trimmed;
-}
-
-export function buildMealEstimatePrompt(description: string, mealLabel?: string): string {
-  const mealCtx = mealLabel ? `Meal: ${mealLabel}.` : '';
-  return `${mealCtx} The user describes what they ate (Romanian or English). Estimate total macros for the full description.
-
-Rules:
-- Use typical portion sizes when amounts are vague (e.g. "2 ouă" ≈ 140g, "o felie pâine" ≈ 30g).
-- Round calories to integer; protein/carbs/fat to whole grams.
-- Return ONLY JSON: {"calories": number, "protein": number, "carbs": number, "fat": number}
-
-User input:
-${description}`;
 }
 
 export function mealMacrosToFormFields(m: MealMacrosEstimate): {
