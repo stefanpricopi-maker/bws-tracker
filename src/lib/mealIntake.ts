@@ -45,6 +45,11 @@ export const MEAL_LABELS: Record<MealSlot, string> = {
   dinner:    'Cină',
 };
 
+export function formatMacroGrams(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
 export function macrosFromForm(f: MealFormFields): MealMacros {
   return {
     calories: Math.round(Number(f.calories) || 0),

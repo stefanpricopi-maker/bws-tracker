@@ -12,6 +12,7 @@ import {
   MEAL_SLOTS,
   MEAL_LABELS,
   EMPTY_DAY_MEALS,
+  formatMacroGrams,
   storedMealsFromForm,
   sumDayMeals,
   parseStoredDayMeals,
@@ -86,7 +87,8 @@ interface MacroBarProps {
 }
 
 function MacroBar({ label, consumed, target, unit, color }: MacroBarProps) {
-  const remaining = Math.max(0, target - consumed);
+  const remaining = Math.max(0, Math.round((target - consumed) * 10) / 10);
+  const overBy = Math.max(0, Math.round((consumed - target) * 10) / 10);
   const progress  = pct(consumed, target);
   const over      = consumed > target;
 
@@ -98,14 +100,14 @@ function MacroBar({ label, consumed, target, unit, color }: MacroBarProps) {
         </span>
         <span className="text-xs text-gray-500">
           <span className={over ? 'text-red-400 font-bold' : 'text-white font-semibold'}>
-            {consumed}
+            {formatMacroGrams(consumed)}
           </span>
-          <span className="text-gray-600"> / {target}{unit}</span>
+          <span className="text-gray-600"> / {formatMacroGrams(target)}{unit}</span>
           {!over && (
-            <span className="text-gray-600"> · {remaining}{unit} left</span>
+            <span className="text-gray-600"> · {formatMacroGrams(remaining)}{unit} left</span>
           )}
           {over && (
-            <span className="text-red-400 font-semibold"> +{consumed - target}{unit} over</span>
+            <span className="text-red-400 font-semibold"> +{formatMacroGrams(overBy)}{unit} over</span>
           )}
         </span>
       </div>
@@ -567,7 +569,7 @@ export default function DietTracker() {
             <div className="flex flex-col gap-1.5">
               <div className="flex justify-between text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                 <span>Macro split</span>
-                <span className="font-normal">{totalG}g total</span>
+                <span className="font-normal">{formatMacroGrams(totalG)}g total</span>
               </div>
               <div className="flex h-3 rounded-full overflow-hidden gap-px">
                 {pPct > 0 && <div className="bg-blue-500  transition-all" style={{ width: `${pPct}%` }} title={`Protein ${pPct}%`} />}

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  formatMacroGrams,
   sumDayMeals,
   storedMealsFromForm,
   parseStoredDayMeals,
@@ -9,6 +10,12 @@ import {
 } from './mealIntake';
 
 describe('mealIntake', () => {
+  it('formats macro grams without float noise', () => {
+    expect(formatMacroGrams(88.69999999999999)).toBe('88.7');
+    expect(formatMacroGrams(38.3)).toBe('38.3');
+    expect(formatMacroGrams(180)).toBe('180');
+  });
+
   it('sums meals for daily totals', () => {
     const stored = storedMealsFromForm({
       ...EMPTY_DAY_MEALS,
